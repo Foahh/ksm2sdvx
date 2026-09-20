@@ -1,0 +1,4 @@
+/docs/camera_analysis/
+/output/
+__pycache__/
+*.py[cod]
