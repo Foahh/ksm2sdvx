@@ -1,0 +1,42 @@
+[build-system]
+requires = ["uv_build>=0.11.13,<0.12"]
+build-backend = "uv_build"
+
+[project]
+name = "ksm2sdvx"
+version = "0.1.0"
+description = "KSM to SDVX conversion tools"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+ksm2sdvx = "ksm2sdvx.cli:main"
+
+[dependency-groups]
+dev = ["hypothesis", "pyright", "pytest", "pytest-cov", "ruff"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "-ra"]
+
+[tool.coverage.run]
+source = ["ksm2sdvx"]
+
+[tool.coverage.report]
+show_missing = true

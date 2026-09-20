@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "meta": {
+    "title": "Synthetic",
+    "artist": "Tests",
+    "chart_author": "Tests",
+    "difficulty": 2,
+    "level": 10,
+    "disp_bpm": "120"
+  },
+  "beat": {
+    "bpm": [
+      [
+        0,
+        120
+      ]
+    ]
+  }
+}

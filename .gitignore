@@ -1,4 +1,12 @@
-/docs/camera_analysis/
+/docs/analysis/*
 /output/
 __pycache__/
 *.py[cod]
+.venv/
+.cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+dist/

@@ -1,0 +1,1 @@
+"""Pure curve mathematics."""
