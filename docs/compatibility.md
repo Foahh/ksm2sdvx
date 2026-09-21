@@ -19,7 +19,8 @@ have additional behavior described below.
 | Other auto tilt modes, including zero | Explicit unsupported-feature diagnostics |
 | Spins and half-spins | Attached to matching slams; duration mapping, fallback and ambiguity are reported |
 | Swing and other camera body controls | Preserved with unsupported-feature diagnostics |
-| Stops and nondefault scroll speed | Preserved with unsupported-feature diagnostics |
+| Scroll speed, including negative values | Converted to signed ManualSpeed updates; linear and curved ramps are sampled |
+| Stops (`beat.stop`) | Preserved with unsupported-feature diagnostics |
 | Effect definitions, automation, invocations | Preserved; translation deferred and omissions diagnosed |
 | Keysounds | Configuration/resources retained; audible behavior is not converted |
 | Metadata, BGM and artwork references | Preserved for package processing; their absence from VOX text does not fail strict chart conversion |
@@ -40,7 +41,23 @@ translation of authored KSON effects remains unsupported and diagnosed.
 The target model supports explicit beat resolution, BPM pause flags and options,
 effect definitions and modulation, optional chain counts, post-effects, scripts,
 and locked controllers. That target-format support does not imply a KSON mapping
-for stops, scroll-speed behavior, FX or scripted visuals.
+for stops, FX or scripted visuals.
+
+`beat.scroll_speed` uses instantaneous `ManualSpeed` multipliers, independent of
+BPM. Constant values and jumps are retained, including negative multipliers,
+zero-speed pauses and values above 1. Linear and curved ramps become held speed
+updates every `--curve-step` KSON pulses (15 by default), with every source anchor retained in
+the timing grid. This is a stepwise approximation, not continuous interpolation
+or an error-bounded match of note travel. Smaller intervals reduce the step size;
+intervals and source anchors must fit the five-pulse target grid. Redundant
+unchanged updates are omitted. Before the first anchor its incoming value applies;
+at an anchor its outgoing value applies, and the final value persists.
+Scroll events contribute to the chart end without changing BPM or note timing.
+Negative multipliers are emitted unchanged and accepted in strict conversion;
+reverse-scroll rendering and judgment behavior have not been verified in gameplay.
+The separate `beat.stop` field remains unsupported, even though zero values in
+`scroll_speed` are converted. See [vox2ksh](https://github.com/whiteou7/vox2ksh)
+for the upstream VOX reference.
 
 Spin conversion sets VOX's total duration to twice the KSON duration and reports
 `SPIN_DURATION_MAPPING` as an approximation. It never selects a triple roll for a

@@ -14,6 +14,7 @@ from ksm2sdvx.chart.vox.model import (
     ControllerSpan,
     LaserCurve,
     LaserMarker,
+    ManualSpeed,
     MillisecondDuration,
     OpaqueController,
     OpaqueControllerName,
@@ -158,9 +159,7 @@ def test_unordered_controllers_and_unknown_fields_are_preserved(vox_chart: VoxCh
     raw = OpaqueController(
         START, OpaqueControllerName.SPECIAL, (0, 0, "LANECLEARCOL", "x80202020", 0, 0)
     )
-    locked = OpaqueController(
-        START, OpaqueControllerName.MANUAL_SPEED, (0, 0, "f1.00", "0.00", "0.00", "0.00")
-    )
+    locked = ManualSpeed(START, 1.0)
     target = replace(vox_chart, controllers=(late, early, raw), locked_controllers=(locked,))
     text = serialize_vox(target)
     assert text.index("\tMorphing2") < text.index("\tRealize") < text.index("\tSpecialN")

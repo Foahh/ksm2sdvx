@@ -13,6 +13,7 @@ from ksm2sdvx.chart.vox.model import (
     AirScale,
     Controller,
     ControllerSpan,
+    ManualSpeed,
     MillisecondDuration,
     OpaqueRow,
     Realize,
@@ -84,6 +85,8 @@ def controller_row(event: Controller) -> str:
         return f"{pos}\tAIR{'R' if event.right else 'L'}_ScaX\t{event.c2}\t{event.c3:g}\t{decimal(event.c4)}\t{decimal(event.c5)}\t{decimal(event.c6)}\t{decimal(event.c7)}"
     if isinstance(event, ControllerSpan):
         return f"{pos}\t{event.name.value}\t{event.unused_c2}\t{event.duration}\t{clean(event.start_value):.9f}\t{clean(event.end_value):.9f}\t{int(event.node_type)}\t{event.unused_c7:.6f}"
+    if isinstance(event, ManualSpeed):
+        return f"{pos}\tManualSpeed\t{event.unknown_c2}\t0\tf{decimal(event.multiplier)}\t0.00\t0.00\t0.00"
     return "\t".join((pos, event.name.value, *(field(v) for v in event.fields)))
 
 

@@ -23,7 +23,7 @@ uv run ksm2sdvx package package.toml --game-data reference/data
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Audio and image processing executable |
 | `--ffprobe EXECUTABLE` | `ffprobe` | Image probing executable |
 | `--strict` | Off | Reject omitted source features, including unmapped package metadata/resources |
-| `--curve-step PULSES` | `15` | Laser/tilt curve interval and maximum moving zoom span; positive integer divisible by 5 |
+| `--curve-step PULSES` | `15` | Laser/tilt curve and scroll-speed ramp sampling interval, and maximum moving zoom span; positive integer divisible by 5 |
 | `-h`, `--help` | — | Show command help |
 
 Command-line paths resolve from the working directory. `-o` names the mod

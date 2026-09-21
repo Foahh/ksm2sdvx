@@ -10,6 +10,7 @@ from ksm2sdvx.chart.conversion.lasers import convert_lasers
 from ksm2sdvx.chart.conversion.options import ConversionOptions
 from ksm2sdvx.chart.conversion.profiles import VoxProfile
 from ksm2sdvx.chart.conversion.report import ConversionReport, ReportBuilder
+from ksm2sdvx.chart.conversion.scroll import convert_scroll_speed
 from ksm2sdvx.chart.conversion.timing import Timeline
 from ksm2sdvx.chart.errors import ConversionError
 from ksm2sdvx.chart.kson.model import KsonChart
@@ -52,6 +53,10 @@ def convert_chart(
     controllers, tilt_modes, camera_end = convert_camera(
         chart.camera, timeline, options, profile, report
     )
+    scroll, scroll_end = convert_scroll_speed(
+        chart.beat.scroll_speed, timeline, options.curve_step, report
+    )
+    controllers = tuple(sorted((*controllers, *scroll), key=lambda event: event.position))
     left = tuple(s.event for s in samples if s.track == 1)
     right = tuple(s.event for s in samples if s.track == 8)
     tracks = tuple(
@@ -62,11 +67,12 @@ def convert_chart(
         VoxMeterEvent(timeline.position(p), e.numerator, e.denominator)
         for p, e in zip(timeline.starts, chart.beat.time_signatures, strict=True)
     )
-    # Include supported timing and tilt events, even when no note reaches them.
+    # Include supported timing and controller events, even when no note reaches them.
     end = max(
         button_end,
         spin_end,
         camera_end,
+        scroll_end,
         *(int(p) for p in timeline.starts),
         *(e.pulse for e in chart.beat.bpm),
         *(s.pulse for s in samples),

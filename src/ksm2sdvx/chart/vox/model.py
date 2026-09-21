@@ -164,6 +164,15 @@ class ControllerSpan:
     unused_c7: float = 0
 
 
+@dataclass(frozen=True, slots=True)
+class ManualSpeed:
+    """Instantaneous scroll multiplier; C4 is an f-prefixed float payload."""
+
+    position: VoxPosition
+    multiplier: float
+    unknown_c2: int = 0
+
+
 class OpaqueControllerName(StrEnum):
     """Commands whose complete payload layout is not specified."""
 
@@ -175,7 +184,6 @@ class OpaqueControllerName(StrEnum):
     MORPHING_0 = "Morphing0"
     MORPHING_1 = "Morphing1"
     MORPHING_3 = "Morphing3"
-    MANUAL_SPEED = "ManualSpeed"
     SPECIAL = "SpecialN"
 
 
@@ -189,7 +197,7 @@ class OpaqueController:
     fields: tuple[Field, ...]  # C2 onward, retained without invented meanings.
 
 
-type Controller = Realize | AirScale | ControllerSpan | OpaqueController
+type Controller = Realize | AirScale | ControllerSpan | ManualSpeed | OpaqueController
 type TrackEvent = VoxBtNote | VoxFxChip | VoxFxHold | VoxLaserPoint
 
 

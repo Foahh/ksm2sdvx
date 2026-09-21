@@ -14,6 +14,7 @@ from ksm2sdvx.chart.vox.model import (
     ControllerSpan,
     LaserCurve,
     LaserMarker,
+    ManualSpeed,
     MillisecondDuration,
     OpaqueController,
     OpaqueControllerName,
@@ -196,6 +197,12 @@ def validate_controllers(
                 raise ConversionError("Only Tilt has a node type")
             if absolute + integer(event.duration) > end:
                 raise ConversionError("Controller duration exceeds end position")
+        elif isinstance(event, ManualSpeed):
+            finite(event.multiplier)
+            if abs(event.multiplier) > float.fromhex("0x1.fffffep+127"):
+                raise ConversionError("ManualSpeed multiplier exceeds the float32 range")
+            if integer(event.unknown_c2) > 0xFFFFFFFF:
+                raise ConversionError("ManualSpeed C2 must fit an unsigned 32-bit integer")
         elif type(event) is OpaqueController:
             if type(event.name) is not OpaqueControllerName:
                 raise ConversionError("Invalid opaque controller name")

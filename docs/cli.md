@@ -56,7 +56,7 @@ These options apply to `chart`, `inspect` and `package`:
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--strict` | Off | Reject omitted source features; supported approximations remain allowed |
-| `--curve-step PULSES` | `15` | Positive integer divisible by 5; laser/tilt curve interval and maximum moving zoom span |
+| `--curve-step PULSES` | `15` | Positive integer divisible by 5; laser/tilt curve and scroll-speed ramp sampling interval, and maximum moving zoom span |
 
 Camera conversion uses a fixed joint zoom projection and angular tilt mapping.
 See [camera behavior and limits](compatibility.md#chart-conversion).

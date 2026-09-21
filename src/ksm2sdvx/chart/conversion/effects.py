@@ -31,16 +31,6 @@ def report_unconverted(chart: KsonChart, report: ReportBuilder) -> None:
                 message="Scroll stops are not converted.",
                 pulse=stop.pulse,
             )
-    for i, point in enumerate(chart.beat.scroll_speed):
-        if point.incoming != 1 or point.outgoing != 1:
-            report.record(
-                "scroll_speed",
-                FeatureStatus.UNSUPPORTED,
-                f"/beat/scroll_speed/{i}",
-                code="UNSUPPORTED_SCROLL_SPEED",
-                message="Nondefault scroll speed is not converted.",
-                pulse=point.pulse,
-            )
     for name, group in (("fx", chart.audio.fx), ("laser", chart.audio.laser)):
         base = f"/audio/audio_effect/{name}"
         for i, _ in enumerate(group.definitions):
