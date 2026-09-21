@@ -14,6 +14,7 @@ from ksm2sdvx.chart import (
     convert_chart,
     load_kson,
 )
+from ksm2sdvx.chart.audio import ChartAudioProgram, apply_rendered_audio, compile_chart_audio
 from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.common.types import JsonValue
 from ksm2sdvx.jacket import (
@@ -34,11 +35,20 @@ from ksm2sdvx.metadata import (
     serialize_music_database,
 )
 from ksm2sdvx.music import FfmpegMusicProcessor, MusicRequest, S3vMusicSettings
+from ksm2sdvx.music.render_models import AudioRenderer
+from ksm2sdvx.music.renderer import NativeAudioRenderer
+from ksm2sdvx.pipeline.audio import (
+    audio_measurements,
+    render_chart_audio,
+    rendered_music_resource,
+    rendering_report,
+)
 from ksm2sdvx.pipeline.config import ChartInput, PackageConfig
 from ksm2sdvx.pipeline.errors import PackageError
 from ksm2sdvx.pipeline.models import PackageChart, PackageResource, PackageWriteResult, SdvxPackage
 from ksm2sdvx.pipeline.writer import LayeredFsPackageWriter
 from ksm2sdvx.resources import discover_resources
+from ksm2sdvx.resources.discovery import resolve_resource
 from ksm2sdvx.resources.models import ResourceInput, ResourceRecord, ResourceReference
 
 
@@ -47,6 +57,7 @@ class _Chart:
     binding: ChartInput
     source: KsonChart
     conversion: ConversionResult
+    program: ChartAudioProgram
 
 
 def _portable_diagnostic(diagnostic: Diagnostic, root: Path) -> Diagnostic:
@@ -89,11 +100,13 @@ def _load_charts(
         if not path.is_relative_to(root):
             raise PackageError("Chart escapes the source root")
         parsed = load_kson(path)
-        converted = convert_chart(parsed.chart, options=options, profile=profile)
-        charts.append(_Chart(replace(binding, path=path), parsed.chart, converted))
+        converted = convert_chart(
+            parsed.chart, options=replace(options, strict=False), profile=profile
+        )
+        program = compile_chart_audio(parsed.chart)
+        charts.append(_Chart(replace(binding, path=path), parsed.chart, converted, program))
         relative = path.relative_to(root).as_posix()
         diagnostics.extend(replace(d, source_path=relative) for d in parsed.diagnostics)
-        diagnostics.extend(replace(d, source_path=relative) for d in converted.report.diagnostics)
         jacket = binding.jacket.source or config.jacket.source
         references.extend(
             ResourceInput(path, ref)
@@ -154,6 +167,7 @@ def build_package(
     profile: VoxProfile,
     ffmpeg: str = "ffmpeg",
     ffprobe: str = "ffprobe",
+    renderer: AudioRenderer | None = None,
 ) -> PackageWriteResult:
     """Build one explicitly grouped song; never modify the reference game data."""
     try:
@@ -165,6 +179,7 @@ def build_package(
             profile=profile,
             ffmpeg=ffmpeg,
             ffprobe=ffprobe,
+            renderer=renderer,
         )
     except OSError as exc:
         raise PackageError(f"Package filesystem operation failed: {exc}") from exc
@@ -179,6 +194,7 @@ def _build_package(
     profile: VoxProfile,
     ffmpeg: str,
     ffprobe: str,
+    renderer: AudioRenderer | None,
 ) -> PackageWriteResult:
     options.validate()
     profile.validate()
@@ -219,7 +235,17 @@ def _build_package(
             )
     for asset in assets:
         for use in asset.uses:
-            if use.role not in {"music", "jacket"}:
+            owner = next(chart for chart in charts if chart.binding.path == use.source)
+            consumed = any(
+                reference.role == use.role
+                and (
+                    reference.name == asset.name
+                    if reference.preset
+                    else resolve_resource(reference, use.source, config.root) == asset.resolved_path
+                )
+                for reference in owner.program.resources
+            )
+            if use.role not in {"music", "jacket"} and not consumed:
                 if options.strict:
                     raise PackageError(
                         f"Strict package conversion would omit a {use.role} resource"
@@ -298,22 +324,18 @@ def _build_package(
     if bgm.preview_duration <= 0:
         raise PackageError("Package preview duration must be positive")
     music_processor = FfmpegMusicProcessor(ffmpeg=ffmpeg)
+    renderer = renderer if renderer is not None else NativeAudioRenderer(ffmpeg=ffmpeg)
     jacket_processor = FfmpegJacketProcessor(ffmpeg=ffmpeg, ffprobe=ffprobe)
     resources: list[PackageResource] = []
+    audio_reports: list[dict[str, JsonValue]] = []
+    rendered_charts: list[_Chart] = []
     with tempfile.TemporaryDirectory(prefix="ksm2sdvx-media-") as temp:
         workspace = Path(temp)
         audio_settings = S3vMusicSettings(
             target_lufs=config.target_lufs,
             true_peak_dbtp=config.true_peak_dbtp,
-            offset_ms=int(bgm.offset),
-            source_volume=bgm.volume,
         )
-        full, preview = music_processor.process_song(
-            MusicRequest(
-                music,
-                workspace / metadata.music_filename(),
-                audio_settings,
-            ),
+        preview = music_processor.process_preview(
             MusicRequest(
                 music,
                 workspace / metadata.music_filename(preview=True),
@@ -325,12 +347,50 @@ def _build_package(
                 ),
             ),
         )
-        for result in (full, preview):
-            resources.append(
-                PackageResource(result.resource, metadata.directory / result.resource.path.name)
-            )
-            diagnostics.extend(result.diagnostics)
+        resources.append(
+            PackageResource(preview.resource, metadata.directory / preview.resource.path.name)
+        )
+        diagnostics.extend(preview.diagnostics)
         for chart, assignment in zip(charts, assignments, strict=True):
+            rendered = render_chart_audio(
+                chart.source,
+                chart.program,
+                source=chart.binding.path,
+                root=config.root,
+                destination=workspace / f"rendered_{assignment.slot.suffix}.wav",
+                renderer=renderer,
+            )
+            conversion = apply_rendered_audio(
+                chart.conversion, chart.source, chart.program, options=options
+            )
+            rendered_charts.append(replace(chart, conversion=conversion))
+            full = music_processor.process(
+                MusicRequest(
+                    rendered_music_resource(rendered, chart.binding.path),
+                    workspace / metadata.music_filename(slot=assignment.slot),
+                    audio_settings,
+                )
+            )
+            resources.append(
+                PackageResource(full.resource, metadata.directory / full.resource.path.name)
+            )
+            diagnostics.extend(
+                replace(d, source_path=str(chart.binding.path))
+                for d in (*conversion.report.diagnostics, *rendered.diagnostics, *full.diagnostics)
+            )
+            audio_reports.append(
+                {
+                    "slot": assignment.slot.value,
+                    "file": full.resource.path.name,
+                    "rendering": rendering_report(
+                        rendered, chart.binding.path.relative_to(config.root).as_posix()
+                    ),
+                    "coverage": chart.program.coverage_paths,
+                    "source_volume": bgm.volume,
+                    "offset_ms": int(bgm.offset),
+                    **audio_measurements(full),
+                }
+            )
             jacket = _owned_resource(assets, chart.binding.path, "jacket")
             for size, label in (
                 (JacketSize.SMALL, "small"),
@@ -374,7 +434,7 @@ def _build_package(
                     str(metadata.directory / metadata.chart_filename(assignment.slot)),
                     chart.conversion.chart,
                 )
-                for chart, assignment in zip(charts, assignments, strict=True)
+                for chart, assignment in zip(rendered_charts, assignments, strict=True)
             ),
             metadata,
             tuple(resources),
@@ -391,25 +451,19 @@ def _build_package(
                     "slot": chart.binding.slot,
                     "conversion": chart.conversion.report.to_dict(),
                 }
-                for chart in charts
+                for chart in rendered_charts
             ),
             "music": {
                 "target_lufs": config.target_lufs,
                 "true_peak_dbtp": config.true_peak_dbtp,
-                "gain_db": full.gain_db,
-                "source_volume": bgm.volume,
-                "measured_input_lufs": full.measurement.integrated_lufs
-                if full.measurement
-                else None,
-                "measured_output_lufs": full.output_measurement.integrated_lufs
-                if full.output_measurement
-                else None,
-                "measured_output_dbtp": full.output_measurement.true_peak_dbtp
-                if full.output_measurement
-                else None,
-                "offset_ms": int(bgm.offset),
-                "preview_start_ms": int(bgm.preview_offset),
-                "preview_duration_ms": int(bgm.preview_duration),
+                "charts": tuple(audio_reports),
+                "preview": {
+                    "file": preview.resource.path.name,
+                    "reference": "original_full_track",
+                    "start_ms": int(bgm.preview_offset),
+                    "duration_ms": int(bgm.preview_duration),
+                    **audio_measurements(preview),
+                },
             },
             "diagnostics": tuple(d.to_dict() for d in diagnostics),
         }

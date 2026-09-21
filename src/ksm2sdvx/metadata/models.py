@@ -147,8 +147,13 @@ class SdvxMetadata:
     def chart_filename(self, slot: ChartSlot) -> str:
         return f"{self.stem}_{slot.suffix}.vox"
 
-    def music_filename(self, *, preview: bool = False) -> str:
-        return f"{self.stem}{'_pre' if preview else ''}.s3v"
+    def music_filename(self, *, slot: ChartSlot | None = None, preview: bool = False) -> str:
+        if preview and slot is not None:
+            raise MetadataError("The original-audio preview does not have a chart slot")
+        if not preview and slot is None:
+            raise MetadataError("Gameplay music requires a chart slot")
+        suffix = "_pre" if slot is None else f"_{slot.suffix}"
+        return f"{self.stem}{suffix}.s3v"
 
     def jacket_filename(self, slot: ChartSlot, size: str = "standard") -> str:
         suffixes = {"standard": "", "small": "_s", "big": "_b"}

@@ -15,9 +15,19 @@ from tests.conftest import document
 from tests.support import chart_metadata, database_text, settings
 
 from ksm2sdvx.chart import DEFAULT_PROFILE, ConversionOptions, VoxChart
+from ksm2sdvx.chart.conversion.converter import UnsupportedFeaturesError
 from ksm2sdvx.cli import main
 from ksm2sdvx.common.errors import OutputError
+from ksm2sdvx.jacket import FfmpegJacketProcessor, JacketRequest, JacketResult, JacketSettings
 from ksm2sdvx.metadata import MetadataError, PackageMetadata, SdvxMetadataConverter
+from ksm2sdvx.music import (
+    FfmpegMusicProcessor,
+    MusicError,
+    MusicRequest,
+    MusicResult,
+    S3vMusicSettings,
+)
+from ksm2sdvx.music.render_models import AudioRenderRequest, AudioRenderResult
 from ksm2sdvx.pipeline import (
     LayeredFsPackageWriter,
     PackageChart,
@@ -27,6 +37,7 @@ from ksm2sdvx.pipeline import (
     load_package_config,
     parse_package_config,
 )
+from ksm2sdvx.resources.models import ProcessedResource
 
 MANIFEST = """name = "synthetic"
 song_id = 3000
@@ -213,7 +224,9 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     expected_music = output / "music/3000_synthetic"
     assert (expected_music / "3000_synthetic_3e.vox").is_file()
     assert (expected_music / "3000_synthetic_2a.vox").is_file()
-    assert (expected_music / "3000_synthetic.s3v").stat().st_size > 0
+    assert (expected_music / "3000_synthetic_3e.s3v").stat().st_size > 0
+    assert (expected_music / "3000_synthetic_2a.s3v").stat().st_size > 0
+    assert not (expected_music / "3000_synthetic.s3v").exists()
     assert (expected_music / "3000_synthetic_pre.s3v").stat().st_size > 0
     for audio in expected_music.glob("*.s3v"):
         data = audio.read_bytes()
@@ -259,6 +272,10 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     music_report = cast(dict[str, object], report["music"])
     assert music_report["target_lufs"] == -11
     assert music_report["true_peak_dbtp"] == -1.0
+    chart_audio = cast(list[dict[str, object]], music_report["charts"])
+    assert [item["slot"] for item in chart_audio] == ["exhaust", "advanced"]
+    preview_report = cast(dict[str, object], music_report["preview"])
+    assert preview_report["reference"] == "original_full_track"
     assert str(tmp_path) not in report_text and tmp_path.as_posix() not in report_text
     assert json.dumps(str(tmp_path))[1:-1] not in report_text
     assert main(["package", str(manifest), "--game-data", str(game), "-o", str(output)]) == 1
@@ -303,3 +320,190 @@ def test_writer_rejects_traversal_and_leaves_existing_output(
     with pytest.raises(OutputError, match="already exists"):
         LayeredFsPackageWriter().write(replace(package, charts=()), destination=output)
     assert (output / "keep").read_bytes() == b"original"
+
+
+class _PackageMusic(FfmpegMusicProcessor):
+    def __init__(self) -> None:
+        self.full: list[MusicRequest[S3vMusicSettings]] = []
+        self.previews: list[MusicRequest[S3vMusicSettings]] = []
+
+    def process(self, request: MusicRequest[S3vMusicSettings]) -> MusicResult:
+        self.full.append(request)
+        source = request.source.resolved_path
+        assert source is not None
+        request.destination.write_bytes(source.read_bytes())
+        return MusicResult(
+            ProcessedResource(request.destination, ()), gain_db=float(len(self.full))
+        )
+
+    def process_preview(self, request: MusicRequest[S3vMusicSettings]) -> MusicResult:
+        self.previews.append(request)
+        request.destination.write_bytes(b"original preview")
+        return MusicResult(ProcessedResource(request.destination, ()), gain_db=3.0)
+
+
+class _PackageJackets(FfmpegJacketProcessor):
+    def process(self, request: JacketRequest[JacketSettings]) -> JacketResult:
+        request.destination.write_bytes(b"converted jacket")
+        return JacketResult(ProcessedResource(request.destination, ()))
+
+
+class _PackageRenderer:
+    def __init__(self, *, fail_after: int | None = None) -> None:
+        self.requests: list[AudioRenderRequest] = []
+        self.fail_after = fail_after
+
+    def render(self, request: AudioRenderRequest) -> AudioRenderResult:
+        self.requests.append(request)
+        request.destination.write_bytes(f"chart audio {len(self.requests)}".encode())
+        if self.fail_after is not None and len(self.requests) > self.fail_after:
+            raise MusicError("Renderer failed")
+        return AudioRenderResult(ProcessedResource(request.destination, ()), frames=44100)
+
+
+def _stub_package_media(monkeypatch: pytest.MonkeyPatch) -> _PackageMusic:
+    music = _PackageMusic()
+
+    def make_music(ffmpeg: str) -> FfmpegMusicProcessor:
+        return music
+
+    monkeypatch.setattr("ksm2sdvx.pipeline.build.FfmpegMusicProcessor", make_music)
+    monkeypatch.setattr("ksm2sdvx.pipeline.build.FfmpegJacketProcessor", _PackageJackets)
+    return music
+
+
+def test_package_uses_tempo_range_without_display_bpm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, game = _inputs(tmp_path)
+    path = manifest.parent / "chart.kson"
+    data = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    cast(dict[str, object], data["meta"]).pop("disp_bpm")
+    data["beat"] = {"bpm": [[0, 135], [960, 172.5]]}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    _stub_package_media(monkeypatch)
+    output = tmp_path / "mod"
+    build_package(
+        load_package_config(manifest),
+        game_data=game,
+        destination=output,
+        options=ConversionOptions(strict=True),
+        profile=DEFAULT_PROFILE,
+        renderer=_PackageRenderer(),
+    )
+    xml = ET.fromstring((output / "others/music_db.merged.xml").read_bytes().decode("cp932"))
+    assert xml.findtext("music/info/bpm_min") == "13500"
+    assert xml.findtext("music/info/bpm_max") == "17250"
+
+
+@pytest.mark.parametrize("fail_after", [None, 1])
+def test_package_renders_each_difficulty_and_publishes_only_complete_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_after: int | None
+) -> None:
+    manifest, game = _inputs(tmp_path)
+    source = manifest.parent
+    (source / "advanced.kson").write_bytes((source / "chart.kson").read_bytes())
+    manifest.write_text(
+        MANIFEST.replace(
+            "[jacket]", '[[charts]]\npath = "advanced.kson"\nslot = "advanced"\n\n[jacket]'
+        ),
+        encoding="utf-8",
+    )
+    config = load_package_config(manifest)
+    music = _stub_package_media(monkeypatch)
+    renderer = _PackageRenderer(fail_after=fail_after)
+    output = tmp_path / "mod"
+    if fail_after is not None:
+        with pytest.raises(MusicError, match="Renderer failed"):
+            build_package(
+                config,
+                game_data=game,
+                destination=output,
+                options=ConversionOptions(strict=True),
+                profile=DEFAULT_PROFILE,
+                renderer=renderer,
+            )
+        assert len(renderer.requests) == 2 and not output.exists()
+        return
+    build_package(
+        config,
+        game_data=game,
+        destination=output,
+        options=ConversionOptions(strict=True),
+        profile=DEFAULT_PROFILE,
+        renderer=renderer,
+    )
+    assert len(renderer.requests) == len(music.full) == 2
+    assert all(request.settings.offset_ms == 0 for request in music.full)
+    assert all(request.settings.source_volume == 1 for request in music.full)
+    assert len(music.previews) == 1
+    assert music.previews[0].source.resolved_path == source / "music.wav"
+    assert music.previews[0].settings.offset_ms == 0
+    folder = output / "music/3000_synthetic"
+    assert (folder / "3000_synthetic_3e.s3v").read_bytes() == b"chart audio 1"
+    assert (folder / "3000_synthetic_2a.s3v").read_bytes() == b"chart audio 2"
+    assert (folder / "3000_synthetic_pre.s3v").read_bytes() == b"original preview"
+    report = cast(dict[str, object], json.loads((output / "ksm2sdvx-report.json").read_text()))
+    audio = cast(dict[str, object], report["music"])
+    rendered_charts = cast(list[dict[str, object]], audio["charts"])
+    assert [item["gain_db"] for item in rendered_charts] == [1, 2]
+
+
+def test_package_strict_consumes_file_keysounds_only_after_rendering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, game = _inputs(tmp_path)
+    chart = manifest.parent / "chart.kson"
+    chart.write_text(
+        document(
+            note={"fx": [[0, [240, 240]], []]},
+            audio={
+                "bgm": {"filename": "music.wav", "preview": {"offset": 250, "duration": 1500}},
+                "audio_effect": {"fx": {"long_event": {"gate": [[240], []]}}},
+                "key_sound": {"fx": {"chip_event": {"sample.wav": [[0], []]}}},
+            },
+        ),
+        encoding="utf-8",
+    )
+    (manifest.parent / "sample.wav").write_bytes(b"sample")
+    _stub_package_media(monkeypatch)
+    renderer = _PackageRenderer()
+    output = tmp_path / "mod"
+    build_package(
+        load_package_config(manifest),
+        game_data=game,
+        destination=output,
+        options=ConversionOptions(strict=True),
+        profile=DEFAULT_PROFILE,
+        renderer=renderer,
+    )
+    assert [sample.id for sample in renderer.requests[0].samples] == ["sample.wav"]
+    vox = (output / "music/3000_synthetic/3000_synthetic_3e.vox").read_text(encoding="utf-8")
+    assert "001,01,00\t0\t255" in vox
+
+
+def test_package_rendering_does_not_bypass_unrelated_strict_omissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, game = _inputs(tmp_path)
+    chart = manifest.parent / "chart.kson"
+    chart.write_text(
+        document(
+            beat={"bpm": [[0, 120]], "stop": [[240, 120]]},
+            audio={"bgm": {"filename": "music.wav", "preview": {"offset": 0, "duration": 1000}}},
+        ),
+        encoding="utf-8",
+    )
+    _stub_package_media(monkeypatch)
+    renderer = _PackageRenderer()
+    output = tmp_path / "mod"
+    with pytest.raises(UnsupportedFeaturesError, match="Strict conversion"):
+        build_package(
+            load_package_config(manifest),
+            game_data=game,
+            destination=output,
+            options=ConversionOptions(strict=True),
+            profile=DEFAULT_PROFILE,
+            renderer=renderer,
+        )
+    assert len(renderer.requests) == 1 and not output.exists()

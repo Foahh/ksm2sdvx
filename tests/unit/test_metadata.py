@@ -56,7 +56,7 @@ def test_new_song_fragment_fields_slots_encoding_and_names() -> None:
     assert payload.directory.as_posix() == "music/3000_new_song"
     assert payload.chart_filename(ChartSlot.EXHAUST) == "3000_new_song_3e.vox"
     assert payload.chart_filename(ChartSlot.ULTIMATE) == "3000_new_song_6u.vox"
-    assert payload.music_filename() == "3000_new_song.s3v"
+    assert payload.music_filename(slot=ChartSlot.EXHAUST) == "3000_new_song_3e.s3v"
     assert payload.music_filename(preview=True) == "3000_new_song_pre.s3v"
     assert payload.jacket_filename(ChartSlot.EXHAUST) == "jk_3000_3.png"
     assert payload.jacket_filename(ChartSlot.MAXIMUM, "big") == "jk_3000_5_b.png"

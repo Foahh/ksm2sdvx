@@ -1,5 +1,6 @@
 """Public package inspection, conversion and output composition operations."""
 
+from ksm2sdvx.pipeline.audio import ChartAudioOutput, convert_chart_audio_file
 from ksm2sdvx.pipeline.build import build_package
 from ksm2sdvx.pipeline.config import (
     ChartInput,
@@ -25,6 +26,7 @@ from ksm2sdvx.pipeline.writer import LayeredFsPackageWriter
 __all__ = [
     "InspectedChart",
     "ChartInput",
+    "ChartAudioOutput",
     "JacketConfig",
     "PackageConfig",
     "PackageError",
@@ -38,6 +40,7 @@ __all__ = [
     "SourcePackage",
     "inspect_package",
     "build_package",
+    "convert_chart_audio_file",
     "load_package_config",
     "parse_package_config",
 ]
