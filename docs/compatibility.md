@@ -39,8 +39,13 @@ and twenty-four disabled parameter assignments. FX holds reference pair `2`
 (the first pair); FX chips use sample `0`. These tables complete the VOX structure;
 standalone chart conversion diagnoses authored audio it cannot produce.
 Package creation bakes supported effects into each difficulty's music, disables
-native FX and laser processing, and uses sample `255` for rendered gold FX chips.
-Ordinary silent chips retain sample `0`.
+native FX and laser processing, and uses sample `2` for rendered keysounded FX
+chips with a silent per-difficulty `general_sampler_<difficulty>.s3p` bank.
+This preserves the keysounded appearance while the audible keysounds come from
+rendered music. Ordinary chips retain sample `0`. A standalone VOX file has no
+such bank; `apply_rendered_audio` defaults to sample `0` unless its caller
+supplies a sample index backed by a silent bank. Sample `255` is also loaded as
+`0` by the game and cannot retain the gold appearance.
 
 The target model supports explicit beat resolution, BPM pause flags and options,
 effect definitions and modulation, optional chain counts, post-effects, scripts,

@@ -191,8 +191,12 @@ A silent rendered mix cannot be normalized and fails with an audio error.
 
 Effects are baked into gameplay music and do not depend on player input. The
 matching VOX chart disables native FX and laser filtering to avoid applying the
-effects twice. Rendered keysounded FX chips retain their gold appearance using
-sample 255. Arcade laser-slam feedback remains enabled. The Windows x64 package
+effects twice. Rendered keysounded FX chips use sample `2` and a generated silent
+`general_sampler_<difficulty>.s3p` bank to retain the gold appearance without
+adding native keysound audio. Keep this bank alongside its VOX file; without it,
+the game would play its default sample. Ordinary FX chips use sample `0`.
+The bank applies to that difficulty; arcade laser-slam feedback remains enabled.
+The Windows x64 package
 includes the audio renderer, BASS libraries, and five KSM chip presets; no KSM
 installation or runtime setup is required.
 
