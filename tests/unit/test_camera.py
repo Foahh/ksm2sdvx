@@ -150,7 +150,7 @@ def test_staggered_graphs_hold_values_at_other_graphs_knots() -> None:
     assert RADIUS.decode(radii[-1].end_value) == pytest.approx(
         zoom_pose(100, 100, RADIUS, ROTATION).radius
     )
-    assert result.report.end_pulse == 360
+    assert result.report.end_pulse == 1515
 
 
 def test_isolated_zoom_value_is_initialized_and_held_before_first_point() -> None:
@@ -209,7 +209,8 @@ def test_instantaneous_tilt_turn_is_removed_without_changing_following_ramp(turn
     result = camera_result({"tilt": [[0, 0], [240, [0, turn]], [480, turn + 1]]})
     rows = spans(result, ControllerName.TILT)
     assert not any(row.duration == 0 for row in rows)
-    assert rows[-1].start_value == 0
+    assert rows[-2].start_value == 0
+    assert rows[-2].end_value == rows[-1].start_value
     assert rows[-1].end_value == pytest.approx(MANUAL_TILT_SCALE)
     assert "TILT_JUMP_REBASED" in {d.code for d in result.report.diagnostics}
 
@@ -303,8 +304,10 @@ def test_manual_zero_releases_only_at_automatic_setting() -> None:
     assert first.start_value == first.end_value == resumed.start_value == resumed.end_value == 0
 
 
-@pytest.mark.parametrize("camera_end", [960, 1920])
-def test_manual_hold_covers_later_camera_and_timing_events(camera_end: int) -> None:
+@pytest.mark.parametrize("camera_end,expected_end", [(960, 1440), (1920, 3360)])
+def test_manual_hold_covers_later_camera_and_timing_events(
+    camera_end: int, expected_end: int
+) -> None:
     chart = parse_kson(
         document(
             camera={"tilt": [[0, 0]], "cam": {"body": {"zoom_top": [[camera_end, 0]]}}},
@@ -312,8 +315,59 @@ def test_manual_hold_covers_later_camera_and_timing_events(camera_end: int) -> N
         )
     ).chart
     result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
-    assert spans(result, ControllerName.TILT)[0].duration == max(camera_end, 1440) // 5
-    assert result.report.end_pulse == max(camera_end, 1440)
+    assert spans(result, ControllerName.TILT)[0].duration == expected_end // 5
+    assert result.report.end_pulse == expected_end
+
+
+@pytest.mark.parametrize("value", [0, 1, -1, "zero"])
+def test_terminal_tilt_has_a_hold_before_playback_ends(value: int | str) -> None:
+    result = convert_chart(
+        parse_kson(
+            document(
+                beat={"bpm": [[0, 120], [960, 185]]},
+                note={"bt": [[960], [], [], []]},
+                camera={"tilt": [[0, "normal"], [960, value]]},
+            )
+        ).chart,
+        options=ConversionOptions(strict=True),
+        profile=DEFAULT_PROFILE,
+    )
+    (hold,) = spans(result, ControllerName.TILT)
+    assert hold.position == VoxPosition(2, 1, VoxTick(0))
+    assert hold.duration == 356
+    assert hold.node_type == TiltNode.SINGLE
+    expected = value * MANUAL_TILT_SCALE if isinstance(value, int) else 0
+    assert hold.start_value == hold.end_value == pytest.approx(expected)
+    assert result.report.end_pulse == 2740
+    serialize_vox(result.chart)
+
+
+def test_terminal_zoom_and_tilt_share_the_outro_without_moving_notes() -> None:
+    result = convert_chart(
+        parse_kson(
+            document(
+                note={"bt": [[960], [], [], []]},
+                camera={
+                    "tilt": [[0, "normal"], [960, 1]],
+                    "cam": {
+                        "body": {
+                            "zoom_top": [[0, 50], [960, [50, -100]]],
+                            "zoom_bottom": [[0, 0], [960, [0, 100]]],
+                        }
+                    },
+                },
+            )
+        ).chart,
+        options=ConversionOptions(strict=True),
+        profile=DEFAULT_PROFILE,
+    )
+    ending = VoxPosition(2, 1, VoxTick(0))
+    assert result.chart.tracks[2].events[-1].position == ending
+    for name in (ControllerName.RADIUS, ControllerName.ROTATION_X, ControllerName.TILT):
+        assert spans(result, name)[-1].position == ending
+    assert result.chart.end_position > ending
+    assert result.report.end_pulse == 2115
+    assert spans(result, ControllerName.TILT)[-1].duration == 231
 
 
 def test_manual_jump_stays_inside_its_sequence() -> None:

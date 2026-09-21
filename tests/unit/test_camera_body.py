@@ -109,7 +109,7 @@ def test_delayed_graph_applies_incoming_before_first_point_and_resets(
     assert jump.duration == 0 and jump.start_value == jump.end_value < 0
     assert spans[-1].position == VoxPosition(1, 3, VoxTick(0))
     assert spans[-1].duration == 0 and spans[-1].start_value == spans[-1].end_value == 0
-    assert result.report.end_pulse == 480
+    assert result.report.end_pulse == 1635
 
 
 def test_rotation_jumps_and_continuous_turns_use_degrees_without_wrapping() -> None:
@@ -182,10 +182,10 @@ def test_body_controls_combine_with_zoom_and_extend_zero_tilt_hold() -> None:
         options=ConversionOptions(strict=True),
         profile=DEFAULT_PROFILE,
     )
-    assert result.report.end_pulse == 960
-    assert result.chart.end_position == VoxPosition(2, 1, VoxTick(0))
+    assert result.report.end_pulse == 2115
+    assert result.chart.end_position == VoxPosition(3, 1, VoxTick(39))
     (hold,) = rows(result, ControllerName.TILT)
-    assert hold.duration == 192 and hold.node_type == TiltNode.SINGLE
+    assert hold.duration == 423 and hold.node_type == TiltNode.SINGLE
     assert hold.start_value == hold.end_value == 0
     assert rows(result, ControllerName.RADIUS)
     assert rows(result, ControllerName.ROTATION_X)

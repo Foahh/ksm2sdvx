@@ -70,7 +70,7 @@ def convert_chart(
         profile,
         report,
         end,
-        tuple(e.pulse for e in chart.beat.bpm),
+        chart.beat.bpm,
     )
     controllers = tuple(sorted((*controllers, *scroll), key=lambda event: event.position))
     left = tuple(s.event for s in samples if s.track == 1)

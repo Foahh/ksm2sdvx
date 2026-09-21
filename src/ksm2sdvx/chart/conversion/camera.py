@@ -1,8 +1,9 @@
 """Camera graph conversion and stable laser slam association."""
 
 from dataclasses import dataclass, replace
+from fractions import Fraction
 from itertools import pairwise
-from math import fmod, isfinite
+from math import ceil, fmod, isfinite
 
 from ksm2sdvx.chart.conversion.camera_body import CENTER_SPLIT_SCALE, body_graph
 from ksm2sdvx.chart.conversion.lasers import LaserSample
@@ -14,7 +15,7 @@ from ksm2sdvx.chart.conversion.zoom import zoom_spans
 from ksm2sdvx.chart.errors import ConversionError
 from ksm2sdvx.chart.geometry.camera import MANUAL_TILT_SCALE, Normalization
 from ksm2sdvx.chart.geometry.curves import anchors
-from ksm2sdvx.chart.kson.model import AutoTilt, CameraInfo, SpinEvent, SpinKind, TiltEvent
+from ksm2sdvx.chart.kson.model import AutoTilt, BpmEvent, CameraInfo, SpinEvent, SpinKind, TiltEvent
 from ksm2sdvx.chart.vox.model import (
     AirScale,
     Controller,
@@ -186,7 +187,7 @@ def convert_camera(
     profile: VoxProfile,
     report: ReportBuilder,
     end_pulse: int,
-    bpm_pulses: tuple[int, ...],
+    bpms: tuple[BpmEvent, ...],
 ) -> tuple[tuple[Controller, ...], tuple[VoxTiltMode, ...], int]:
     start = timeline.position(0)
     controllers: list[tuple[VoxPosition, int, Controller]] = [
@@ -198,6 +199,26 @@ def convert_camera(
     report.count("camera_realize_rows", 2)
     report.count("air_scale_rows", 2)
     end = end_pulse
+    camera_end = max(
+        (
+            points[-1].pulse
+            for points in (
+                camera.zoom_top,
+                camera.zoom_bottom,
+                camera.rotation_deg,
+                camera.center_split,
+                camera.tilt,
+            )
+            if points
+        ),
+        default=-1,
+    )
+    if camera_end >= end:
+        # Leave a visible outro for a camera anchor at the end of the chart.
+        outro_seconds = Fraction(12, 5)
+        outro_ticks = ceil(outro_seconds * 4 * Fraction(str(bpms[-1].bpm)) / 5)
+        end = camera_end + outro_ticks * 5
+    bpm_pulses = tuple(event.pulse for event in bpms)
 
     def add(span: Span, name: ControllerName, scale: float, node: int = 0) -> None:
         nonlocal end

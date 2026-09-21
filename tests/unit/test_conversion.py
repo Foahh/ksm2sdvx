@@ -60,8 +60,9 @@ def test_end_includes_timing_and_modes() -> None:
         )
     ).chart
     result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
-    assert result.report.end_pulse == 2880
-    assert result.chart.end_position == result.chart.tilt_modes[-1].position
+    assert result.report.end_pulse == 4610
+    assert result.chart.tilt_modes[-1].position == VoxPosition(4, 2, VoxTick(0))
+    assert result.chart.end_position > result.chart.tilt_modes[-1].position
 
 
 def test_losses_and_strict_mode() -> None:

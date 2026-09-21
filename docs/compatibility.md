@@ -174,7 +174,10 @@ A UTF-8 BOM is accepted with a diagnostic.
 metadata. VOX timing and package BPM ranges use the actual `beat.bpm` events.
 
 Generated headers name `ksm2sdvx`. End markers include supported timing and mode
-events that occur after the last note. Separate manual tilt sequences
+events that occur after the last note. When a camera anchor reaches that end,
+conversion adds a 2.4-second outro, rounded up to the five-pulse grid. Final
+manual tilt holds through this interval so ending camera effects can play.
+Separate manual tilt sequences
 restart their node encoding instead of sharing one sequence across automatic
 intervals.
 
