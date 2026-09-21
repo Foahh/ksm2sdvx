@@ -48,8 +48,8 @@ Run the checks and build:
 
 ```sh
 uv sync
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
 uv run pyright
 uv run pytest
 uv build

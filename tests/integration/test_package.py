@@ -96,10 +96,7 @@ def _inputs(root: Path) -> tuple[Path, Path]:
     _png(source / "jacket.png")
     data = root / "reference-data"
     (data / "others").mkdir(parents=True)
-    (data / "graphics").mkdir()
     (data / "others/music_db.xml").write_text(database_text(), encoding="utf-8")
-    # The package extends this existing archive by name; it does not read or copy its contents.
-    (data / "graphics/s_jacket00.ifs").write_bytes(b"synthetic reference")
     return source / "package.toml", data
 
 
@@ -389,7 +386,6 @@ def test_package_allows_charts_without_jackets(
             '[charts.jacket]\nsource = "jacket.png"\n'
         )
     else:
-        (game / "graphics/s_jacket00.ifs").unlink()
         (source / "jacket.png").unlink()
     manifest.write_text(text, encoding="utf-8")
     _stub_package_media(monkeypatch)
@@ -418,20 +414,11 @@ def test_package_allows_charts_without_jackets(
     assert "music/3000_synthetic/3000_synthetic_3e.vox" in cast(list[str], report["files"])
 
 
-@pytest.mark.parametrize(
-    "missing,message",
-    [("jacket", "Missing asset: jacket.png"), ("archive", "selector jackets")],
-)
-def test_package_rejects_missing_inputs_for_supplied_jackets(
-    tmp_path: Path, missing: str, message: str
-) -> None:
+def test_package_rejects_missing_inputs_for_supplied_jackets(tmp_path: Path) -> None:
     manifest, game = _inputs(tmp_path)
-    if missing == "jacket":
-        (manifest.parent / "jacket.png").unlink()
-    else:
-        (game / "graphics/s_jacket00.ifs").unlink()
+    (manifest.parent / "jacket.png").unlink()
     output = tmp_path / "mod"
-    with pytest.raises(PackageError, match=message):
+    with pytest.raises(PackageError, match="Missing asset: jacket.png"):
         build_package(
             load_package_config(manifest),
             game_data=game,
@@ -531,7 +518,7 @@ def test_package_renders_each_difficulty_and_publishes_only_complete_results(
         assert (folder / "general_sampler_3e.s3p").read_bytes() == (
             folder / "general_sampler_2a.s3p"
         ).read_bytes()
-        assert isinstance(music.encoder, SilentS3vEncoder) and music.encoder.calls == 1
+        assert isinstance(music.encoder, SilentS3vEncoder) and music.encoder.calls == 0
     else:
         assert not list(folder.glob("general_sampler_*.s3p"))
     report = cast(dict[str, object], json.loads((output / "ksm2sdvx-report.json").read_text()))
@@ -558,12 +545,17 @@ def test_package_strict_consumes_file_keysounds_only_after_rendering(
         encoding="utf-8",
     )
     (manifest.parent / "sample.wav").write_bytes(b"sample")
-    music = _stub_package_media(monkeypatch)
-    music.encoder = SilentS3vEncoder(fail=fail_bank)
+    _stub_package_media(monkeypatch)
+    if fail_bank:
+
+        def missing_assets(anchor: str) -> Path:
+            return tmp_path / "missing"
+
+        monkeypatch.setattr("ksm2sdvx.music.sampler.files", missing_assets)
     renderer = _PackageRenderer()
     output = tmp_path / "mod"
     if fail_bank:
-        with pytest.raises(MusicError, match="Sample encoding failed"):
+        with pytest.raises(MusicError, match="Cannot copy bundled silent keysound bank"):
             build_package(
                 load_package_config(manifest),
                 game_data=game,

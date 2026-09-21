@@ -1,7 +1,7 @@
 import shutil
 import struct
 import subprocess
-import sys
+import zlib
 from pathlib import Path
 
 import pytest
@@ -9,13 +9,14 @@ import pytest
 from ksm2sdvx.music.sampler import SILENT_KEYSOUND_SAMPLE, write_silent_keysound_bank
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Requires Windows WMA Professional encoder")
-def test_encoded_native_keysound_decodes_to_silence(tmp_path: Path) -> None:
+def test_bundled_native_keysound_decodes_to_silence(tmp_path: Path) -> None:
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
         pytest.skip("FFmpeg is required to verify the compressed sample")
     result = write_silent_keysound_bank(tmp_path / "general_sampler_5m.s3p")
     data = result.path.read_bytes()
+    assert struct.unpack_from("<4sI", data) == (b"S3P0", 15)
+    assert struct.unpack_from("<I", data, len(data) - 4)[0] == zlib.crc32(data[:-4])
     offset, size = struct.unpack_from("<II", data, 8 + SILENT_KEYSOUND_SAMPLE * 8)
     magic, header_size, payload_size = struct.unpack_from("<4sII", data, offset)
     assert magic == b"S3V0" and header_size == 32 and size >= 32 + payload_size

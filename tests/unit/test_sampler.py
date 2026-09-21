@@ -1,9 +1,10 @@
 import struct
 import zlib
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
-from tests.audio_support import SilentS3vEncoder, asf_payload
+from tests.audio_support import asf_payload
 
 from ksm2sdvx.music._s3p import serialize_s3p
 from ksm2sdvx.music._s3v import serialize_s3v
@@ -36,17 +37,24 @@ def test_invalid_sample_bank_is_rejected(samples: tuple[bytes, ...]) -> None:
 
 
 @pytest.mark.parametrize("fail", [False, True])
-def test_silent_bank_encoding_is_atomic(tmp_path: Path, fail: bool) -> None:
+def test_bundled_bank_copy_is_atomic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail: bool
+) -> None:
     destination = tmp_path / "bank.s3p"
     destination.write_bytes(b"existing")
-    encoder = SilentS3vEncoder(fail=fail)
     if fail:
-        with pytest.raises(MusicError, match="Sample encoding failed"):
-            write_silent_keysound_bank(destination, encoder=encoder)
+
+        def missing_assets(anchor: str) -> Path:
+            return tmp_path / "missing"
+
+        monkeypatch.setattr("ksm2sdvx.music.sampler.files", missing_assets)
+        with pytest.raises(MusicError, match="Cannot copy bundled silent keysound bank"):
+            write_silent_keysound_bank(destination)
         assert destination.read_bytes() == b"existing"
     else:
-        result = write_silent_keysound_bank(destination, encoder=encoder)
+        result = write_silent_keysound_bank(destination)
         assert result.path == destination
-        assert destination.read_bytes().startswith(b"S3P0")
-    assert encoder.calls == 1
+        assert destination.read_bytes() == (
+            files("ksm2sdvx.music").joinpath("assets/silent_keysounds.s3p").read_bytes()
+        )
     assert tuple(tmp_path.iterdir()) == (destination,)

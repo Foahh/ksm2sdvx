@@ -36,7 +36,7 @@ and [conversion limits](#conversion-limits-and-failures).
 | Argument or option | Default | Meaning |
 | --- | --- | --- |
 | `MANIFEST` | Required | Path to the TOML configuration |
-| `--game-data PATH` | Required | Reference data directory containing `others/music_db.xml`; `graphics/s_jacket00.ifs` is needed only when producing jackets |
+| `--game-data PATH` | Required | Reference data directory containing `others/music_db.xml` |
 | `-o PATH`, `--output PATH` | `output/data_mods/<name>` | New mod directory; must not exist or be inside the reference data directory |
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Audio and image processing executable |
 | `--ffprobe EXECUTABLE` | `ffprobe` | Image probing executable |
@@ -216,7 +216,7 @@ A silent rendered mix cannot be normalized and fails with an audio error.
 
 Effects are baked into gameplay music and do not depend on player input. The
 matching VOX chart disables native FX and laser filtering to avoid applying the
-effects twice. Rendered keysounded FX chips use sample `2` and a generated silent
+effects twice. Rendered keysounded FX chips use sample `2` and a bundled silent
 `general_sampler_<difficulty>.s3p` bank to retain the gold appearance without
 adding native keysound audio. Keep this bank alongside its VOX file; without it,
 the game would play its default sample. Ordinary FX chips use sample `0`.
@@ -268,8 +268,10 @@ my_song/
 ```
 
 Place the finished `my_song` directory under the target's `data_mods` directory.
-Selector images extend the existing `s_jacket00.ifs`; no copied game archive is
-included. The XML fragment adds a new entry rather than duplicating an existing ID.
+The `graphics/s_jacket00_ifs` folder supplies selector images to LayeredFS.
+Conversion needs no jacket archive; at runtime, LayeredFS extends the game's
+`s_jacket00.ifs`. No game archive is copied into the package. The XML fragment
+adds a new entry rather than duplicating an existing ID.
 
 The schema-version-1 package report records chart conversion reports, source
 paths relative to the package root, per-difficulty rendering and audio

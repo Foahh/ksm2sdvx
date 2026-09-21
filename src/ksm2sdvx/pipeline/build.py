@@ -224,10 +224,6 @@ def _build_package(
             for use in asset.uses
         )
     }
-    if jackets and not (game_data / "graphics/s_jacket00.ifs").is_file():
-        raise PackageError(
-            "Reference data must contain graphics/s_jacket00.ifs for selector jackets"
-        )
     for chart in charts:
         for field in chart.source.meta.optional:
             if field.path in {
@@ -378,9 +374,7 @@ def _build_package(
             sampler_filename: str | None = None
             if chart.program.keysounds:
                 if silent_bank is None:
-                    silent_bank = write_silent_keysound_bank(
-                        workspace / "silent_keysounds.s3p", encoder=music_processor.encoder
-                    )
+                    silent_bank = write_silent_keysound_bank(workspace / "silent_keysounds.s3p")
                 sampler_filename = f"general_sampler_{assignment.slot.suffix}.s3p"
                 resources.append(
                     PackageResource(silent_bank, metadata.directory / sampler_filename)
