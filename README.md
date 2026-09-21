@@ -1,35 +1,67 @@
 # ksm2sdvx
 
-KSM-to-SDVX conversion components. Python 3.14 or later is required.
-After completing the source setup below:
+Convert KSON charts to VOX v13 and build song packages for
+[ifs_layeredfs](https://github.com/mon/ifs_layeredfs). The tool also converts
+individual audio and jacket files. It requires Python 3.14 or later and uses
+[`uv`](https://docs.astral.sh/uv/) to run from source.
 
-```text
-uv sync
-uv run ksm2sdvx chart chart.kson -o output/chart.vox
-uv run ksm2sdvx audio music.ogg -o output/music.s3v
-uv run ksm2sdvx audio --chart song/hard.kson -o output/hard.s3v
-uv run ksm2sdvx jacket jacket.png --size 300 -o output/jacket.png
-uv run ksm2sdvx inspect song/easy.kson song/hard.kson --root song
-uv run ksm2sdvx package package.toml --game-data reference/data
-```
+## Start here
 
-## Development
-
-Windows audio builds require MSVC with the C++ desktop tools and CMake 3.26 or
-later. Run the commands from an x64 developer terminal. Source builds initialize only these
-upstream submodules:
+On Windows, source builds need MSVC with the C++ desktop tools, CMake 3.26 or
+later, and an x64 developer terminal. Initialize the pinned upstream audio code,
+install the project, then convert one chart:
 
 ```text
 git submodule update --init external/ksm-v2
 git -C external/ksm-v2 submodule update --init ksmaudio kson
+uv sync
+uv run ksm2sdvx chart song/hard.kson -o output/hard.vox
 ```
+
+This writes `output/hard.vox` and `output/hard.report.json`. A chart conversion
+does not process its music or artwork. To build a complete song package, start
+with [examples/package.toml](examples/package.toml), copy it into your song
+directory, and run:
+
+```text
+uv run ksm2sdvx package song/package.toml --game-data reference/data
+```
+
+Package creation needs Windows with the Windows Media Format runtime, plus
+FFmpeg and FFprobe. It writes a new mod directory; it does not install the mod.
+See [package creation](docs/package.md) for setup, configuration, and output.
+
+## Other commands
+
+| Task | Example | Details |
+| --- | --- | --- |
+| Inspect charts and referenced files without writing output | `uv run ksm2sdvx inspect song/easy.kson song/hard.kson --root song` | [Command reference](docs/cli.md#package-inspection) |
+| Convert one audio file | `uv run ksm2sdvx audio music.ogg -o output/music.s3v` | [Audio options](docs/media.md#audio) |
+| Render a chart's effects and keysounds into audio | `uv run ksm2sdvx audio --chart song/hard.kson -o output/hard.s3v` | [Chart audio](docs/media.md#chart-audio) |
+| Resize artwork | `uv run ksm2sdvx jacket jacket.png --size 300 -o output/jacket.png` | [Jacket options](docs/media.md#jacket) |
+
+Run `uv run ksm2sdvx --help` for command help. The [command reference](docs/cli.md)
+explains output paths, shared options, exit codes, and reports.
+
+## Documentation
+
+- [Conversion compatibility](docs/compatibility.md): supported KSON behavior,
+  approximations, and target limits.
+- [KSON support gaps](docs/kson-support-gaps.md): unsupported fields and remaining
+  work.
+- [Architecture](docs/architecture.md): components and their boundaries.
+- [Offline renderer](native/README.md): native audio helper and its protocol.
+
+## Development
+
+Run the checks and build:
 
 ```text
 uv sync
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pyright
-uv run pytest --cov
+uv run pytest
 uv build
 ```
 
@@ -41,7 +73,7 @@ cmake --build build/native --config Release
 ctest --test-dir build/native -C Release --output-on-failure
 ```
 
-Related project:
+Related projects:
 
 - [vox2ksh](https://github.com/whiteou7/vox2ksh)
 - [ksm-chart-format](https://github.com/kshootmania/ksm-chart-format)

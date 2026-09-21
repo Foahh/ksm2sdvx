@@ -1,6 +1,17 @@
 # Command reference
 
-One installed command exposes all implemented components:
+Use `ksm2sdvx` for individual conversions, read-only inspection, or a complete
+song package. Pick the command by the output you need:
+
+| Command | What it produces |
+| --- | --- |
+| `chart` | One VOX chart and a JSON conversion report |
+| `audio` | One S3V audio file, optionally rendered from a chart |
+| `jacket` | One square PNG jacket |
+| `inspect` | JSON findings on stdout; no files written |
+| `package` | A new mod directory containing charts, media, and metadata |
+
+Command forms:
 
 ```text
 uv run ksm2sdvx chart SOURCE [-o OUTPUT] [conversion options]
@@ -13,9 +24,9 @@ uv run ksm2sdvx package MANIFEST --game-data DATA [-o OUTPUT] [package options]
 
 `uv run python -m ksm2sdvx` accepts the same commands and arguments. Use
 `uv run ksm2sdvx --help` or append `--help` to any subcommand for its options.
-Command-line paths resolve relative to the working directory. The package
-configuration resolves chart and jacket paths from its own directory, which is
-also the source root. See its [path rules](package.md#complete-configuration-reference).
+Command-line paths resolve relative to the working directory. Paths inside a
+package TOML file resolve from that file's directory. See the
+[package path rules](package.md#complete-configuration-reference).
 
 ## Chart conversion
 
@@ -29,9 +40,8 @@ then writes VOX v13 and an adjacent JSON report. Output defaults to
 `output/<stem>.vox` and `output/<stem>.report.json`. `-o` / `--output` must name a
 `.vox` file; the report uses the same stem with `.report.json`.
 
-This command produces chart text. It records metadata and media references as
-deferred package data and does not read or process those media files. Use
-`package` to produce a complete mod directory from supported chart and media data.
+The chart command records metadata and media references for later use. It does
+not process media files. Use `package` for a complete mod directory.
 See [conversion compatibility](compatibility.md) for supported chart features.
 
 ## Package inspection

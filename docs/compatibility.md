@@ -1,10 +1,17 @@
 # Conversion compatibility
 
-The `vox13` profile converts KSON format version 1 to VOX v13. Chart conversion
-is used by `chart`, `inspect` and `package`. Audio, jacket and package processing
-have additional behavior described below.
+The `vox13` profile converts KSON format version 1 to VOX v13. The `chart`,
+`inspect`, and `package` commands all use this conversion. This page describes
+what the converter emits, what it approximates, and what it rejects.
+
+For a shorter list of unsupported fields, see [KSON support gaps](kson-support-gaps.md).
+For command syntax, see the [command reference](cli.md).
 
 ## Chart conversion
+
+The table is the quickest way to check feature coverage. The sections below
+explain timing, audio, and camera behavior where a short table entry would hide
+an important limit.
 
 | Feature | Behavior |
 | --- | --- |
@@ -30,11 +37,15 @@ have additional behavior described below.
 | Background behavior, gauge, client extensions | Retained; unsupported behavior diagnosed |
 | Editor and compatibility annotations | Retained as deferred source data |
 
+### Timing and source precision
+
 One target tick is five source pulses. Conversion rejects unrepresentable timing
 instead of rounding it. Sampling intervals must be positive multiples of five.
 Laser and tilt curve sampling is deterministic but is not an error-bounded
 approximation. Zoom sampling also checks intermediate projected landmarks.
 Source anchors and jumps are preserved; analytical curve controls are not written to VOX.
+
+### Effects and keysounds
 
 The converter writes five laser effect definitions, twelve no-effect FX pairs,
 and twenty-four disabled parameter assignments. FX holds reference pair `2`
@@ -53,6 +64,8 @@ The target model supports explicit beat resolution, BPM pause flags and options,
 effect definitions and modulation, optional chain counts, post-effects, scripts,
 and locked controllers. That target-format support does not imply a KSON mapping
 for FX or scripted visuals.
+
+### Scroll speed and stops
 
 `beat.scroll_speed` uses instantaneous `ManualSpeed` multipliers, independent of
 BPM. Constant values and jumps are retained, including negative multipliers,
@@ -76,11 +89,15 @@ combined stops and `ManualSpeed`, especially around ramps, need playback
 verification. See [vox2ksh](https://github.com/whiteou7/vox2ksh) for the upstream
 VOX reference.
 
+### Spins
+
 Spin conversion sets VOX's total duration to twice the KSON duration and reports
 `SPIN_DURATION_MAPPING` as an approximation. It never selects a triple roll for a
 long single spin. Fractional-beat encodings use tenths of a quarter note; source
 durations must be multiples of 60 pulses for this mapping, otherwise conversion
 fails without rounding. End position includes the full emitted VOX duration.
+
+### Camera zoom
 
 Zoom conversion jointly matches relative lane width at the judgment row and lane
 height, then inverts the target normalization. Negative bottom values use a
@@ -97,6 +114,8 @@ continuous or playback error guarantee. Failure to meet it on the five-pulse
 grid rejects conversion. Both controls share sampling times; changing one can
 also adjust the other. Initial and isolated zoom values are retained.
 
+### Camera tilt
+
 Manual tilt uses `-8/19` target units per source unit. One raw source unit is
 10 degrees; editor 3600% is raw 36, one turn. Continuous ramps retain their signed
 turn count. Instantaneous changes select an equivalent orientation within half
@@ -107,6 +126,8 @@ value, including zero, holds until the next automatic setting or the chart ends.
 The automatic mode `"zero"` also emits a manual zero hold, lasting until the next
 tilt setting or chart end. It does not create ramps to adjacent manual values.
 Its entry and exit transitions can differ from the source automatic tilt fade.
+
+### Split and rotation
 
 `center_split` uses `Morphing2 = 0.00712 × value`; 100 source units add one
 BT lane's width between the halves. Signed values are retained without clamping.
@@ -126,6 +147,8 @@ for pitch. Camera mapping is fixed; there are no camera gain or scale options.
 It matches selected lane landmarks rather than the entire rendered scene.
 Source projection attribution: [K-Shoot MANIA](https://github.com/kshootmania/ksm-v2);
 its license notice is included in the distribution.
+
+### Unsupported and unknown data
 
 Default conversion warns about omissions and emits the supported chart.
 `--strict` fails for unsupported features; supported sampling and camera

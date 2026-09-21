@@ -1,11 +1,12 @@
 # Audio and jacket commands
 
-The `audio` and `jacket` commands process individual files through the same
-components used by `ksm2sdvx package`. They accept source files directly and do
-not use the package TOML configuration. Both require FFmpeg; jacket processing
-also requires FFprobe. Audio encoding requires Windows with the Windows Media
-Format runtime. See the [command reference](cli.md) for module execution and
-chart/package commands.
+Use `audio` to create one S3V file and `jacket` to create one square PNG. These
+commands take files directly and do not read a package TOML file. Package creation
+uses the same processors when building a complete song.
+
+Both commands require FFmpeg; jacket processing also requires FFprobe. Audio
+encoding requires Windows with the Windows Media Format runtime. See the
+[command reference](cli.md) for chart, inspection, and package commands.
 
 ## Audio
 
@@ -36,6 +37,8 @@ stereo at 44.1 kHz and approximately 384 kb/s. The default path is
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Select the FFmpeg executable |
 | `-h`, `--help` | — | Show audio command help |
 
+### Loudness and previews
+
 Normalization applies a constant volume gain limited by the available peak
 headroom. The command prints the applied gain and measured output loudness when
 available. Lossy encoding can raise the decoded peak; any overshoot is reported.
@@ -60,6 +63,8 @@ The Windows x64 wheel contains the renderer, BASS runtime, and the `clap`,
 or setup command is needed. Other sample and switch-audio files resolve relative
 to the chart and must remain inside its directory. Package conversion instead
 uses the TOML directory as its containment boundary.
+
+### What chart rendering changes
 
 The renderer uses KSM's music effect and compressor chain, then mixes chip
 keysounds. BGM volume controls its level relative to keysounds. The completed mix

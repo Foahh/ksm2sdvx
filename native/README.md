@@ -1,6 +1,10 @@
 # Offline renderer
 
-`ksm2sdvx-render` is a private application helper built against the pinned
+`ksm2sdvx-render` is an internal helper used by the Python music component.
+You normally run `ksm2sdvx audio --chart` or `ksm2sdvx package` instead of
+calling it directly.
+
+It is built against the pinned
 [ksmaudio](https://github.com/kshootmania/ksmaudio) dependency. It decodes audio
 without opening a playback device and processes ksmaudio DSP instances in their
 declared priority order.
@@ -14,12 +18,16 @@ The Python music component resolves resources and converts every input to stereo
 format, with authored effects, relative gains, and chip samples mixed in. Loudness
 normalization and S3V encoding happen afterward in Python.
 
+## Processing order
+
 Music uses ksmaudio's decode stream, including its 0.1 input gain and compressor
 (−24 dB threshold, 5:1 ratio, 1 ms attack, 20 ms release, +18 dB makeup).
 The stream applies authored BGM gain between higher-priority FX and laser filters.
 Chip samples are mixed after music compression. The completed mix saturates at
 −1/+1, matching signed PCM export, while retaining floating-point precision within
 that range. Final normalization applies one constant gain to this rendered mix.
+
+## Request and event timing
 
 The internal request protocol has `protocol_version: 1`, `sample_rate: 44100`,
 `duration_frames`, `offset_frames`, `bgm_volume`, `tracks`, `samples`, and `program`.
@@ -41,6 +49,8 @@ their bus is active. Each switched FX track keeps
 its own built-in laser-filter and compressor state, including while inaudible.
 Each sample has one voice by default, or ten for the applicable source compatibility
 setting. When the pool is full, retriggering replaces its longest-playing voice.
+
+## Result and verification
 
 A successful call writes one JSON receipt to stdout containing PCM frame count,
 channel count, sample rate, runtime versions, effect/keysound counts, the

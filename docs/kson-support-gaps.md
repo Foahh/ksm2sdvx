@@ -1,16 +1,22 @@
 # KSON support gaps
 
-This is the implementation backlog for KSON version 1 conversion with the `vox13`
-profile. It describes converter limitations, not proof that the target game
-cannot represent a feature. Update the relevant entries when support changes.
-See [conversion compatibility](compatibility.md) for supported behavior and
+This page lists KSON version 1 features that `ksm2sdvx` does not fully convert
+with the `vox13` profile. It describes the converter's current behavior. See
+[conversion compatibility](compatibility.md) for supported features and
 approximation details.
+
+Use [unsupported chart fields](#unsupported-chart-fields) for direct VOX mapping,
+[audio status](#audio-status-offline-rendering-workaround) for effects rendered
+into music, and [unsupported package fields](#unsupported-package-fields-and-resources)
+for metadata and resource omissions.
 
 ## Unsupported chart fields
 
 These fields are parsed and retained, but their behavior is not emitted into
 VOX. Default conversion reports omissions; `--strict` rejects unsupported
-features. Empty or inactive values may not produce a diagnostic.
+features. Empty or inactive values may not produce a diagnostic. The audio rows
+describe missing native VOX mappings. Package creation handles some of them by
+rendering the sound into the music, as described below.
 
 | KSON field | Remaining work | Diagnostic |
 | --- | --- | --- |
@@ -29,11 +35,31 @@ features. Empty or inactive values may not produce a diagnostic.
 | `impl` | Interpret applicable client-specific behavior | `UNSUPPORTED_SOURCE_FEATURE` |
 | Unknown optional members | Add explicit mappings where applicable | `UNKNOWN_EXTENSION` |
 
-The chart's default effect tables and note sample selectors do not implement
-authored audio. Track standalone VOX translation separately from package audio
-rendering: rendering an effect into music does not provide an interactive game
-effect. When adding rendering support, update the package status as well as the
-remaining standalone conversion gaps.
+## Audio status: offline-rendering workaround
+
+Authored audio is supported through a workaround: render effects and chip
+keysounds into difficulty-specific music before packaging. This does not
+implement native, interactive VOX effects. The rendered effects play regardless
+of player input, including missed notes and laser tracking.
+
+| Feature | Workaround status |
+| --- | --- |
+| Supported FX and laser effect definitions, parameters, automation, and hold overrides | Baked into gameplay audio by the bundled renderer |
+| Laser graphs, filter delay, and legacy filter gain | Used by the audio renderer independently of VOX curve sampling |
+| `switch_audio` | Resolves referenced tracks for rendering |
+| FX chip keysounds and per-event volume | Mixed into gameplay audio, including bundled presets and file-based samples |
+| Native FX and laser filters | Disabled in package charts after successful rendering to avoid applying effects twice |
+| Preview | Generated from the original music without baked chart effects |
+| Custom slam sounds, slam volume behavior, legacy alternate BGM, and unknown audio extensions | Still unsupported; omissions are diagnosed and rejected in strict mode |
+
+`audio --chart` renders audio only; `package` combines it with the matching VOX
+chart. Standalone `chart` conversion and read-only `inspect` do not render audio
+or resolve these native chart-mapping gaps. Package strictness accepts covered
+audio features only after successful rendering. Missing required resources and
+invalid effect parameters always fail. Arcade laser-slam feedback is retained.
+
+The workaround is not a claim of exact KSM Editor output equivalence. Audio
+level consistency and renderer fidelity remain verification limits.
 
 ## Unsupported package fields and resources
 
@@ -43,7 +69,7 @@ remaining standalone conversion gaps.
 | `meta.information`, `meta.std_bpm` | Retained without a package output mapping | `UNSUPPORTED_PACKAGE_METADATA` |
 | `meta.title_img_filename`, `meta.artist_img_filename`, `meta.icon_filename` | Referenced resources are not included in the package | `UNSUPPORTED_PACKAGE_RESOURCE` |
 | `audio.bgm.legacy.fp_filenames` | Alternate BGM resources are retained but not routed or packaged | `UNSUPPORTED_PACKAGE_RESOURCE` |
-| Effect audio, keysound, and background resource references | Inventoried but not processed into package output | `UNSUPPORTED_PACKAGE_RESOURCE` |
+| Unsupported audio and background resource references | Inventoried but not processed; supported switch-audio and chip-sample files are consumed by the audio workaround | `UNSUPPORTED_PACKAGE_RESOURCE` |
 
 Package omissions warn by default and fail strict package creation. A successful
 standalone chart conversion does not establish package support for these fields.
@@ -83,6 +109,7 @@ annotations (`RETAINED_SOURCE_DATA`); they are not gameplay implementation gaps.
 - Scroll-speed conversion: `src/ksm2sdvx/chart/conversion/scroll.py`.
 - BPM and stop conversion: `src/ksm2sdvx/chart/conversion/beat.py`.
 - Unsupported-feature accounting: `src/ksm2sdvx/chart/conversion/effects.py`.
+- Audio workaround: `src/ksm2sdvx/chart/audio.py`, `src/ksm2sdvx/music/renderer.py`, `native/`, and `src/ksm2sdvx/pipeline/audio.py`.
 - Package metadata and resource omissions: `src/ksm2sdvx/pipeline/build.py`.
 - Target model, validation, and serialization: `src/ksm2sdvx/chart/vox/`.
 

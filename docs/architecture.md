@@ -1,11 +1,16 @@
 # Architecture
 
-`ksm2sdvx` is one installable Python 3.14+ project, with one distribution,
-`pyproject.toml`, uv lockfile and command. Its components separate chart conversion,
-media processing, metadata conversion, resource discovery, and package output.
-The pipeline composes components. Components do not import the pipeline, and
-shared modules do not import components. CLI modules handle arguments and
-presentation; domain code never imports them.
+`ksm2sdvx` is one Python 3.14+ package with one command. Chart conversion,
+media processing, metadata conversion, and resource discovery have separate
+modules. The package pipeline combines them to produce a mod directory.
+
+The dependency direction is simple: the pipeline uses components, but components
+do not import the pipeline. Shared code does not import components. CLI modules
+handle arguments and display results; conversion code does not import the CLI.
+
+## Find the code
+
+Use this map to locate the owner of a behavior:
 
 ```text
 src/ksm2sdvx/
@@ -78,7 +83,7 @@ components. Models use frozen, slotted dataclasses and tuple collections;
 settings and target metadata types are supplied by the caller. Imports perform
 no application filesystem work and initialize no media processors.
 
-## Components and implementation status
+## What each component does
 
 | Component | Responsibility | Implementation |
 | --- | --- | --- |
@@ -105,7 +110,11 @@ Media processing, metadata conversion and package writing have concrete
 implementations behind their protocols. FX translation and automatic score/radar
 calculation remain unsupported and produce diagnostics.
 
-## Chart boundary
+## Chart conversion
+
+The chart path has four steps: parse KSON, validate the source, convert to a VOX
+model, then validate and serialize that model. File loading and writing sit at
+the application boundary. This makes each step testable on its own.
 
 `parse_kson(text)` returns `ParsedKson(chart, diagnostics)`; `load_kson(path)` adds
 file loading and source information. Compact wire representations are normalized
@@ -161,7 +170,11 @@ it does not certify media encoding or complete-package output.
 the serialized models. Chart conversion reports use their separate version 1
 schema. Inspection never creates output directories or writes files.
 
-## Processing and output contracts
+## Package processing
+
+Package creation combines chart conversion with media rendering, metadata, and
+file output. Each component exposes a typed request and result; the pipeline
+decides when to call it and where to put its output.
 
 `MusicRequest[SettingsT]` and `JacketRequest[SettingsT]` carry a discovered source
 resource, explicit destination, and typed settings. Their processors return a
@@ -171,9 +184,10 @@ The generic contracts allow other implementations. Concrete settings specify
 the WMA Professional audio format and supported RGB PNG jacket sizes.
 
 `PackageMetadata` contains a separate `ChartMetadata` record for each chart,
-including audio offsets and preview timing. There is no implicit selection of
-song-wide values. `MetadataConverter[SettingsT, TargetT]` returns a typed target
-payload and diagnostics. Target metadata schemas belong to concrete adapters.
+including audio offsets and preview timing. The pipeline does not select
+song-wide values implicitly. `MetadataConverter[SettingsT, TargetT]` returns a
+typed target payload and diagnostics. Target metadata schemas belong to concrete
+adapters.
 
 `SdvxPackage[MetadataT]` composes named VOX charts, target metadata, and
 `PackageResource` records assigning processed files to relative output paths.
@@ -183,7 +197,9 @@ returning the files actually written and diagnostics.
 `build_package` loads the selected charts, validates resource references, converts
 metadata, and processes music and jackets in a temporary workspace. Charts must
 share their music file, offset, source volume and preview timing. Explicit target
-slots determine output names; filenames do not determine song grouping.
+slots determine output names.
+
+### Configuration and metadata
 
 `PackageConfig` contains explicit chart bindings plus music, metadata and jacket
 settings. Its `name` supplies the mod directory name, resource filename suffix
@@ -204,6 +220,8 @@ controls accept explicit overrides validated against their XML integer types.
 Score and radar calculation are not implemented: unspecified radar values and
 maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
 `music_db.merged.xml` fragment and rejects text that cannot be encoded.
+
+### Audio rendering and encoding
 
 `compile_chart_audio` produces immutable audio instructions without file access.
 `AudioRenderRequest` binds those instructions to resolved music and sample files;
@@ -230,6 +248,8 @@ and validates the required S3V footer. Plain ASF files renamed to `.s3v` are not
 valid game output. There is no alternate-codec fallback.
 `FfmpegJacketProcessor` produces RGB PNGs at the four supported sizes, always
 preserving the full image's aspect ratio with black margins (contain).
+
+### Publishing files
 
 `LayeredFsPackageWriter` checks relative paths and collisions, stages charts,
 processed assets, metadata and a report, then publishes a new mod directory.

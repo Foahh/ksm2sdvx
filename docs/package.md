@@ -1,17 +1,34 @@
 # Package creation
 
-`ksm2sdvx package` produces a new-song mod directory for
-[ifs_layeredfs](https://github.com/mon/ifs_layeredfs). It converts charts, music,
-previews, jackets and a music database entry. It does not install the result into
-a running game.
+`ksm2sdvx package` builds one new song for
+[ifs_layeredfs](https://github.com/mon/ifs_layeredfs). It converts the selected
+charts, music, preview, jackets, and music database entry into a mod directory.
+The command does not install the result into a running game.
 
 Package creation requires Windows with the Windows Media Format runtime, plus
 FFmpeg and FFprobe on `PATH`. Use `--ffmpeg` and `--ffprobe` to select executables.
 Python runtime dependencies remain standard-library only.
 
-```text
-uv run ksm2sdvx package package.toml --game-data reference/data
-```
+## Build a package
+
+1. Put your KSON charts and referenced media under one song directory.
+2. Copy [examples/package.toml](../examples/package.toml) into that directory.
+   Set `name`, `song_id`, and a `[[charts]]` entry for each difficulty. Choose an
+   unused song ID; the example ID is not reserved.
+3. Run the command from the project root, using the location of your TOML file
+   and a reference game data directory:
+
+   ```text
+   uv run ksm2sdvx package song/package.toml --game-data reference/data
+   ```
+
+The default output is `output/data_mods/<name>/`. Check the report inside it,
+then place the finished mod directory under the target's `data_mods` directory.
+See [output and reports](#output-and-reports) for the file layout.
+
+The rest of this page is a reference for [command options](#command-options),
+[TOML fields](#complete-configuration-reference), [music and artwork](#music-and-artwork),
+and [conversion limits](#conversion-limits-and-failures).
 
 ## Command options
 
@@ -35,10 +52,9 @@ Camera mapping and its projection limits are described in
 ## Complete configuration reference
 
 [examples/package.toml](../examples/package.toml) contains every supported field,
-with optional source overrides commented out. Place it in your song directory
-and set the song ID, names and chart paths. The tables below describe all accepted
-fields. Unknown keys, invalid types and empty strings are rejected. Omit an
-optional field to use its default; TOML has no null value.
+with optional overrides commented out. The tables below list accepted fields.
+Unknown keys, invalid types, and empty strings are rejected. Omit an optional
+field to use its default; TOML has no null value.
 
 The configuration is unversioned TOML. `metadata.version` is the target music
 database's version field. JSON output reports have their own schema versions.
@@ -171,6 +187,9 @@ including when the supplied values are zero.
 | `one_hand` | `one-hand` |
 
 ## Music and artwork
+
+This section describes the files the package creates. The configuration tables
+above define their input paths, overrides, and defaults.
 
 Music and previews use ASF containers with WMA Professional audio and a 32-byte
 `S3V0` footer required for game playback, stereo at 44.1 kHz and approximately
