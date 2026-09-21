@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
-from ksm2sdvx.metadata.models import ChartRadar
+from ksm2sdvx.metadata.models import MAX_SONG_ID, ChartRadar
 from ksm2sdvx.pipeline.errors import PackageError
 
 
@@ -245,7 +245,7 @@ def parse_package_config(text: str, *, base: Path) -> PackageConfig:
     return PackageConfig(
         name=name,
         root=root,
-        song_id=_integer(data, "song_id"),
+        song_id=_integer(data, "song_id", maximum=MAX_SONG_ID),
         charts=tuple(charts),
         title=_optional_string(metadata, "title"),
         artist=_optional_string(metadata, "artist"),

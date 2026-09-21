@@ -49,19 +49,23 @@ database's version field. JSON output reports have their own schema versions.
 | Field | Required/default | Meaning and constraints |
 | --- | --- | --- |
 | `name` | Required | Shared name for the mod directory and resource filenames; starts with an ASCII letter or digit, followed by ASCII letters, digits, `_` or `-` |
-| `song_id` | Required | Unused integer ID, 1–32767; **10001 and above are recommended** |
+| `song_id` | Required | Unused integer ID, 1–3071 for the supported target |
 | `charts` | At least one `[[charts]]` table | Explicit charts belonging to this song |
 | `metadata` | Optional table | Shared song metadata overrides |
 | `music` | Optional table | Loudness and peak settings |
 | `jacket` | Optional table | Shared artwork and credit overrides |
 
 IDs already in the reference database are rejected. Assign IDs that also avoid
-other installed mods. One command creates one new song; existing songs are not
+other installed mods. The supported target uses fixed song tables: IDs above
+3071 are rejected. LayeredFS does not expand those tables. The example ID 3000
+is not reserved; verify that it is unused in your installation.
+
+One command creates one new song; existing songs are not
 replaced and song grouping is never inferred. Metadata entries are constructed
 from source values and target defaults without selecting an existing song.
 
-For `name = "my_song"` and `song_id = 10001`, the default mod directory is
-`output/data_mods/my_song`, and its resources use the stem `10001_my_song`.
+For `name = "my_song"` and `song_id = 3000`, the default mod directory is
+`output/data_mods/my_song`, and its resources use the stem `3000_my_song`.
 The same name supplies the database's `ascii` field. The displayed song title
 comes from KSON or `metadata.title`.
 
@@ -207,19 +211,19 @@ building a package.
 
 ## Output and reports
 
-For song 10001 in the exhaust slot, the output contains:
+For song 3000 in the exhaust slot, the output contains:
 
 ```text
 my_song/
   others/music_db.merged.xml
-  music/10001_my_song/
-    10001_my_song_3e.vox
-    10001_my_song.s3v
-    10001_my_song_pre.s3v
-    jk_10001_3.png
-    jk_10001_3_s.png
-    jk_10001_3_b.png
-  graphics/s_jacket00_ifs/jk_10001_3_t.png
+  music/3000_my_song/
+    3000_my_song_3e.vox
+    3000_my_song.s3v
+    3000_my_song_pre.s3v
+    jk_3000_3.png
+    jk_3000_3_s.png
+    jk_3000_3_b.png
+  graphics/s_jacket00_ifs/jk_3000_3_t.png
   ksm2sdvx-report.json
 ```
 

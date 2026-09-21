@@ -10,6 +10,9 @@ from ksm2sdvx.common.types import JsonValue, Milliseconds
 from ksm2sdvx.metadata.database import MusicDatabase, XmlElement
 from ksm2sdvx.metadata.errors import MetadataError
 
+# Upper bound for ordinary song IDs in the supported target's song tables.
+MAX_SONG_ID = 3071
+
 
 @dataclass(frozen=True, slots=True)
 class MetadataField:

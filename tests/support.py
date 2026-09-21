@@ -67,7 +67,7 @@ def chart_metadata(name: str = "chart.kson") -> ChartMetadata:
 def settings() -> SdvxMetadataSettings:
     return SdvxMetadataSettings(
         parse_music_database(database_text()),
-        10001,
+        3000,
         (ChartAssignment(Path("chart.kson"), ChartSlot.EXHAUST, "Illustrator"),),
         ascii_name="new_song",
     )

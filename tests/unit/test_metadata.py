@@ -30,7 +30,7 @@ def test_new_song_fragment_fields_slots_encoding_and_names() -> None:
     assert b"\r" not in encoded
     fragment = ET.fromstring(encoded.decode("cp932"))
     assert fragment.attrib == {"revision": "fixture"}
-    assert [entry.get("id") for entry in fragment] == ["10001"]
+    assert [entry.get("id") for entry in fragment] == ["3000"]
     assert fragment.findtext("music/info/title_name") == source.charts[0].title
     assert fragment.findtext("music/info/title_yomigana") == source.charts[0].title
     assert fragment.findtext("music/info/bpm_min") == "12345"
@@ -52,15 +52,15 @@ def test_new_song_fragment_fields_slots_encoding_and_names() -> None:
     assert all(node.text == "0" for node in fragment.findall("music/difficulty/*/radar/*"))
     level = fragment.find("music/difficulty/exhaust/difnum")
     assert level is not None and level.attrib == {"__type": "u8"}
-    assert payload.stem == "10001_new_song"
-    assert payload.directory.as_posix() == "music/10001_new_song"
-    assert payload.chart_filename(ChartSlot.EXHAUST) == "10001_new_song_3e.vox"
-    assert payload.chart_filename(ChartSlot.ULTIMATE) == "10001_new_song_6u.vox"
-    assert payload.music_filename() == "10001_new_song.s3v"
-    assert payload.music_filename(preview=True) == "10001_new_song_pre.s3v"
-    assert payload.jacket_filename(ChartSlot.EXHAUST) == "jk_10001_3.png"
-    assert payload.jacket_filename(ChartSlot.MAXIMUM, "big") == "jk_10001_5_b.png"
-    assert payload.jacket_filename(ChartSlot.ULTIMATE, "small") == "jk_10001_6_s.png"
+    assert payload.stem == "3000_new_song"
+    assert payload.directory.as_posix() == "music/3000_new_song"
+    assert payload.chart_filename(ChartSlot.EXHAUST) == "3000_new_song_3e.vox"
+    assert payload.chart_filename(ChartSlot.ULTIMATE) == "3000_new_song_6u.vox"
+    assert payload.music_filename() == "3000_new_song.s3v"
+    assert payload.music_filename(preview=True) == "3000_new_song_pre.s3v"
+    assert payload.jacket_filename(ChartSlot.EXHAUST) == "jk_3000_3.png"
+    assert payload.jacket_filename(ChartSlot.MAXIMUM, "big") == "jk_3000_5_b.png"
+    assert payload.jacket_filename(ChartSlot.ULTIMATE, "small") == "jk_3000_6_s.png"
     assert {item.code for item in result.diagnostics} == {
         "RADAR_NOT_COMPUTED",
         "MAX_EXSCORE_NOT_COMPUTED",
@@ -303,13 +303,21 @@ def test_duplicate_song_ids_rejected() -> None:
         parse_music_database(ET.tostring(root, encoding="unicode"))
 
 
-@pytest.mark.parametrize("song_id", [0, -1, 32768, True])
-def test_song_id_must_fit_positive_signed_16_bits(song_id: int) -> None:
+@pytest.mark.parametrize("song_id", [0, -1, 3072, 9001, 10001, 32768, True])
+def test_song_id_must_fit_target_song_tables(song_id: int) -> None:
     with pytest.raises(MetadataError, match="song_id"):
         SdvxMetadataConverter().convert(
             PackageMetadata((chart_metadata(),)),
             settings=replace(settings(), song_id=song_id),
         )
+
+
+def test_highest_supported_song_id() -> None:
+    result = SdvxMetadataConverter().convert(
+        PackageMetadata((chart_metadata(),)), settings=replace(settings(), song_id=3071)
+    )
+    assert result.metadata.song_id == 3071
+    assert result.metadata.stem == "3071_new_song"
 
 
 @pytest.mark.parametrize("price,limited", [(-(2**31) - 1, 0), (2**31, 0), (0, -1), (0, 256)])

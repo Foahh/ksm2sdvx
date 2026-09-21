@@ -93,7 +93,7 @@ validation before serialization.
 | Jackets | 8-bit RGB PNG, 108/128/300/676 pixels square; always contain with black margins | Symbolic presets need an explicit file override; transparent pixels composite onto black |
 | Artwork credits | KSON `meta.jacket_author`; shared and per-chart `jacket.author` overrides | No separate chart-level credit setting |
 | Metadata | New entry from selected charts and explicit target defaults, encoded as CP932 XML | Text outside that encoding is rejected; no existing song entry is used as a template |
-| IDs | Explicit unused ID, 1–32767; 10001+ recommended | Checks the reference database, not other installed mods |
+| IDs | Explicit unused ordinary song ID, 1–3071 for the supported target | Checks the reference database, not other installed mods |
 | Package output | New `data_mods/<name>` directory with charts, media, selector artwork and XML fragment | No song replacement or automatic grouping; destination must be new |
 | Score and radar | Explicit maximum EX score and six per-chart radar values accepted; unspecified values become zero with warnings | Automatic calculation is not implemented |
 

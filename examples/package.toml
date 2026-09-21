@@ -4,7 +4,7 @@
 # Build: uv run ksm2sdvx package package.toml --game-data reference/data
 
 name = "my_song" # Folder and resource names; use letters, digits, _ or -.
-song_id = 10001 # Choose an unused ID; 10001+ recommended, maximum 32767.
+song_id = 3000 # Example only; choose an unused ID from 1 to 3071.
 
 [metadata]
 # Title and artist come from KSON unless overridden here.

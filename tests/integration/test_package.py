@@ -29,7 +29,7 @@ from ksm2sdvx.pipeline import (
 )
 
 MANIFEST = """name = "synthetic"
-song_id = 10001
+song_id = 3000
 
 [[charts]]
 path = "chart.kson"
@@ -94,7 +94,9 @@ def _inputs(root: Path) -> tuple[Path, Path]:
 @pytest.mark.parametrize(
     "old,new",
     [
-        ("song_id = 10001", "song_id = true"),
+        ("song_id = 3000", "song_id = true"),
+        ("song_id = 3000", "song_id = 3072"),
+        ("song_id = 3000", "song_id = 10001"),
         ('slot = "exhaust"', 'slot = "unknown"'),
         ('path = "chart.kson"', 'path = "../chart.kson"'),
         ('name = "synthetic"', 'name = "../escape"'),
@@ -208,21 +210,21 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     output = tmp_path / "data_mods/synthetic"
     assert main(["package", str(manifest), "--game-data", str(game), "-o", str(output)]) == 0
     assert all(path.read_bytes() == content for path, content in before.items())
-    expected_music = output / "music/10001_synthetic"
-    assert (expected_music / "10001_synthetic_3e.vox").is_file()
-    assert (expected_music / "10001_synthetic_2a.vox").is_file()
-    assert (expected_music / "10001_synthetic.s3v").stat().st_size > 0
-    assert (expected_music / "10001_synthetic_pre.s3v").stat().st_size > 0
+    expected_music = output / "music/3000_synthetic"
+    assert (expected_music / "3000_synthetic_3e.vox").is_file()
+    assert (expected_music / "3000_synthetic_2a.vox").is_file()
+    assert (expected_music / "3000_synthetic.s3v").stat().st_size > 0
+    assert (expected_music / "3000_synthetic_pre.s3v").stat().st_size > 0
     for suffix, size in (("", 300), ("_s", 108), ("_b", 676)):
         assert struct.unpack_from(
-            ">II", (expected_music / f"jk_10001_3{suffix}.png").read_bytes(), 16
+            ">II", (expected_music / f"jk_3000_3{suffix}.png").read_bytes(), 16
         ) == (size, size)
-    selector = output / "graphics/s_jacket00_ifs/jk_10001_3_t.png"
+    selector = output / "graphics/s_jacket00_ifs/jk_3000_3_t.png"
     assert struct.unpack_from(">II", selector.read_bytes(), 16) == (128, 128)
-    assert (output / "graphics/s_jacket00_ifs/jk_10001_2_t.png").is_file()
+    assert (output / "graphics/s_jacket00_ifs/jk_3000_2_t.png").is_file()
     entry = ET.fromstring((output / "others/music_db.merged.xml").read_bytes().decode("cp932"))
     song = entry.find("music")
-    assert song is not None and song.get("id") == "10001"
+    assert song is not None and song.get("id") == "3000"
     assert song.findtext("info/ascii") == "synthetic"
     assert song.findtext("info/volume") == "91"
     assert song.findtext("info/version") == "7"
@@ -250,7 +252,7 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     assert song.findtext("difficulty/advanced/illustrator") == "Per-chart artist"
     report_text = (output / "ksm2sdvx-report.json").read_text(encoding="utf-8")
     report = cast(dict[str, object], json.loads(report_text))
-    assert report["song_id"] == 10001
+    assert report["song_id"] == 3000
     music_report = cast(dict[str, object], report["music"])
     assert music_report["target_lufs"] == -11
     assert music_report["true_peak_dbtp"] == -1.0

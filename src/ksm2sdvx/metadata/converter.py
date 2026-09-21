@@ -9,6 +9,7 @@ from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.metadata.database import XmlElement, from_element, to_element
 from ksm2sdvx.metadata.errors import MetadataError
 from ksm2sdvx.metadata.models import (
+    MAX_SONG_ID,
     ChartAssignment,
     ChartMetadata,
     ChartRadar,
@@ -164,7 +165,7 @@ class SdvxMetadataConverter:
         self, source: PackageMetadata, *, settings: SdvxMetadataSettings
     ) -> MetadataResult[SdvxMetadata]:
         """Build a new entry from source metadata and explicit target defaults."""
-        _integer(settings.song_id, name="song_id", minimum=1, maximum=32767)
+        _integer(settings.song_id, name="song_id", minimum=1, maximum=MAX_SONG_ID)
         if settings.song_id in settings.database.song_ids:
             raise MetadataError(f"Song ID {settings.song_id} already exists in the music database")
         if not source.charts or not settings.charts:
