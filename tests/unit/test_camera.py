@@ -24,8 +24,8 @@ from ksm2sdvx.chart.geometry.camera import (
     zoom_pose,
 )
 from ksm2sdvx.chart.kson.model import AutoTilt, CurveControl, GraphPoint, TiltEvent
-from ksm2sdvx.chart.types import KsonPulse
-from ksm2sdvx.chart.vox.model import ControllerName, ControllerSpan, Realize
+from ksm2sdvx.chart.types import KsonPulse, VoxTick
+from ksm2sdvx.chart.vox.model import ControllerName, ControllerSpan, Realize, TiltNode, VoxPosition
 
 RADIUS = Normalization(*DEFAULT_PROFILE.radius_anchors)
 ROTATION = Normalization(*DEFAULT_PROFILE.rotation_anchors)
@@ -249,6 +249,83 @@ def test_tilt_rebasing_resets_at_automatic_mode() -> None:
 def test_separate_manual_sequences_restart_node_encoding() -> None:
     result = camera_result({"tilt": [[0, 0], [240, [1, "normal"]], [480, 0], [720, [1, "normal"]]]})
     assert [span.node_type for span in spans(result, ControllerName.TILT)] == [1, 1]
+
+
+@pytest.mark.parametrize("value", [0, 2])
+def test_single_manual_value_holds_during_lasers(value: int) -> None:
+    chart = parse_kson(
+        document(
+            camera={"tilt": [[0, value]]},
+            note={"laser": [[[0, [[0, 0], [480, 1], [960, 0]]]], []]},
+        )
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
+    rows = spans(result, ControllerName.TILT)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.position == VoxPosition(1, 1, VoxTick(0))
+    assert row.duration == 192
+    assert row.node_type == TiltNode.SINGLE
+    assert (row.start_value, row.end_value) == pytest.approx((value * MANUAL_TILT_SCALE,) * 2)
+    assert result.report.end_pulse == 960
+
+
+def test_final_manual_zero_holds_after_a_ramp() -> None:
+    chart = parse_kson(
+        document(
+            camera={"tilt": [[0, 2], [240, 0]]},
+            note={"laser": [[[0, [[0, 0], [480, 1], [960, 0]]]], []]},
+        )
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
+    first, hold = spans(result, ControllerName.TILT)
+    assert first.node_type == TiltNode.START
+    assert hold.node_type == TiltNode.END
+    assert hold.position == VoxPosition(1, 2, VoxTick(0))
+    assert hold.duration == 144
+    assert hold.start_value == hold.end_value == 0
+
+
+def test_manual_zero_releases_only_at_automatic_setting() -> None:
+    chart = parse_kson(
+        document(
+            camera={"tilt": [[0, 0], [480, "normal"], [720, 0]]},
+            note={"laser": [[[0, [[0, 0], [480, 1], [960, 0]]]], []]},
+        )
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
+    first, resumed = spans(result, ControllerName.TILT)
+    assert first.node_type == resumed.node_type == TiltNode.SINGLE
+    assert first.duration == 96
+    assert resumed.position == VoxPosition(1, 4, VoxTick(0))
+    assert resumed.duration == 48
+    assert first.start_value == first.end_value == resumed.start_value == resumed.end_value == 0
+
+
+@pytest.mark.parametrize("camera_end", [960, 1920])
+def test_manual_hold_covers_later_camera_and_timing_events(camera_end: int) -> None:
+    chart = parse_kson(
+        document(
+            camera={"tilt": [[0, 0]], "cam": {"body": {"zoom_top": [[camera_end, 0]]}}},
+            beat={"bpm": [[0, 120], [1440, 150]]},
+        )
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
+    assert spans(result, ControllerName.TILT)[0].duration == max(camera_end, 1440) // 5
+    assert result.report.end_pulse == max(camera_end, 1440)
+
+
+def test_manual_jump_stays_inside_its_sequence() -> None:
+    result = camera_result({"tilt": [[0, [0, 1]], [240, "normal"], [480, 0], [720, [0, "normal"]]]})
+    jump, hold, resumed = spans(result, ControllerName.TILT)
+    assert [jump.node_type, hold.node_type, resumed.node_type] == [
+        TiltNode.START,
+        TiltNode.END,
+        TiltNode.SINGLE,
+    ]
+    assert jump.duration == 0
+    assert jump.end_value == hold.start_value == hold.end_value
+    assert hold.duration == resumed.duration == 48
 
 
 def test_manual_curve_keeps_full_turn_without_sampling_warning() -> None:

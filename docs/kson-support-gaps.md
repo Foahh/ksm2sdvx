@@ -56,7 +56,6 @@ Resource existence checks do not establish that a resource will be used.
 
 | Feature | Remaining limitation |
 | --- | --- |
-| Manual `camera.tilt` | Isolated nonzero values without a span are omitted with `ISOLATED_TILT_VALUE` |
 | Spin and half-spin | Events without a suitable slam are omitted with `UNMATCHED_SPIN`; fallback direction and ambiguous association are approximations |
 | Spin duration | Uses the documented duration mapping; durations not divisible by 60 KSON pulses fail conversion |
 | Curved lasers and manual tilt | Sampled at `--curve-step`; no continuous error bound |

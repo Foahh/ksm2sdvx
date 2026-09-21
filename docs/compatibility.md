@@ -88,8 +88,8 @@ Manual tilt uses `-8/19` target units per source unit. One raw source unit is
 turn count. Instantaneous changes select an equivalent orientation within half
 a turn, so a jump from 0 to 36 does not introduce a target revolution. Target
 smoothing, different rotation pivots and judgment overlays remain approximation
-limits, including combined zoom/tilt and continuous full turns. Isolated nonzero
-manual tilt values without a span are diagnosed as omitted.
+limits, including combined zoom/tilt and continuous full turns. A numeric manual
+value, including zero, holds until the next automatic setting or the chart ends.
 
 Realize anchors are `(17.12, 60.12, 110.12)` for radius and `(0.28, 0.72, 1.57)`
 for pitch. Camera mapping is fixed; there are no camera gain or scale options.

@@ -50,11 +50,19 @@ def convert_chart(
     buttons, button_end = convert_buttons(chart.note, timeline, report)
     samples = convert_lasers(chart.note, timeline, options.curve_step, report)
     samples, spin_end = attach_spins(samples, chart.camera.spins, report)
-    controllers, tilt_modes, camera_end = convert_camera(
-        chart.camera, timeline, options, profile, report
-    )
     scroll, scroll_end = convert_scroll_speed(
         chart.beat.scroll_speed, timeline, options.curve_step, report
+    )
+    end = max(
+        button_end,
+        spin_end,
+        scroll_end,
+        *(int(p) for p in timeline.starts),
+        *(e.pulse for e in chart.beat.bpm),
+        *(s.pulse for s in samples),
+    )
+    controllers, tilt_modes, camera_end = convert_camera(
+        chart.camera, timeline, options, profile, report, end
     )
     controllers = tuple(sorted((*controllers, *scroll), key=lambda event: event.position))
     left = tuple(s.event for s in samples if s.track == 1)
@@ -68,15 +76,7 @@ def convert_chart(
         for p, e in zip(timeline.starts, chart.beat.time_signatures, strict=True)
     )
     # Include supported timing and controller events, even when no note reaches them.
-    end = max(
-        button_end,
-        spin_end,
-        camera_end,
-        scroll_end,
-        *(int(p) for p in timeline.starts),
-        *(e.pulse for e in chart.beat.bpm),
-        *(s.pulse for s in samples),
-    )
+    end = max(end, camera_end)
     report.record("beat", FeatureStatus.CONVERTED, "/beat")
     report.record("notes", FeatureStatus.CONVERTED, "/note")
     report_unconverted(chart, report)

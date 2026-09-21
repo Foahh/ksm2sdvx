@@ -143,7 +143,6 @@ class Span:
     duration: int
     start: float
     end: float
-    ending_auto: bool = False
 
 
 def rebase_tilt(points: tuple[TiltEvent, ...]) -> tuple[TiltEvent, ...]:
@@ -184,6 +183,7 @@ def convert_camera(
     options: ConversionOptions,
     profile: VoxProfile,
     report: ReportBuilder,
+    end_pulse: int,
 ) -> tuple[tuple[Controller, ...], tuple[VoxTiltMode, ...], int]:
     start = timeline.position(0)
     controllers: list[tuple[int, int, Controller]] = [
@@ -194,7 +194,7 @@ def convert_camera(
     ]
     report.count("camera_realize_rows", 2)
     report.count("air_scale_rows", 2)
-    end = 0
+    end = end_pulse
 
     def add(span: Span, name: ControllerName, scale: float, node: int = 0) -> None:
         nonlocal end
@@ -279,69 +279,48 @@ def convert_camera(
                         message=f"Automatic tilt mode {value.value!r} is not mapped.",
                         pulse=point.pulse,
                     )
-        if (
-            not isinstance(point.incoming, AutoTilt)
-            and not isinstance(point.outgoing, AutoTilt)
-            and point.incoming != point.outgoing
-        ):
-            add(
-                Span(point.pulse, 0, point.incoming, point.outgoing),
-                ControllerName.TILT,
-                MANUAL_TILT_SCALE,
-            )
-            report.count("manual_tilt_rows")
     runs: list[list[Span]] = []
     manual: list[Span] | None = None
-    covered: set[int] = set()
-    for i, (current, following) in enumerate(pairwise(tilt)):
-        if isinstance(current.outgoing, AutoTilt) or isinstance(following.incoming, AutoTilt):
+    for i, current in enumerate(tilt):
+        if isinstance(current.outgoing, AutoTilt):
             manual = None
             continue
         if manual is None:
             manual = []
             runs.append(manual)
-        covered.update((i, i + 1))
+        if not isinstance(current.incoming, AutoTilt) and current.incoming != current.outgoing:
+            manual.append(Span(current.pulse, 0, current.incoming, current.outgoing))
+        following = tilt[i + 1] if i + 1 < len(tilt) else None
+        stop = following.pulse if following else end
+        if stop == current.pulse:
+            continue
+        # A numeric value remains manual, including zero, until an automatic setting.
+        if following is None or isinstance(following.incoming, AutoTilt):
+            manual.append(
+                Span(current.pulse, stop - current.pulse, current.outgoing, current.outgoing)
+            )
+            continue
         samples = anchors(
             current.pulse,
-            following.pulse,
+            stop,
             current.outgoing,
             following.incoming,
             current.control,
             options.curve_step,
         )
-        for j, ((y0, v0), (y1, v1)) in enumerate(pairwise(samples)):
-            manual.append(
-                Span(
-                    y0,
-                    y1 - y0,
-                    v0,
-                    v1,
-                    isinstance(following.outgoing, AutoTilt) and j == len(samples) - 2,
-                )
-            )
+        manual.extend(Span(y0, y1 - y0, v0, v1) for (y0, v0), (y1, v1) in pairwise(samples))
     for run in runs:
         for i, span in enumerate(run):
             if len(run) == 1:
-                node = 1 if span.ending_auto else 2
+                node = TiltNode.SINGLE
+            elif i == 0:
+                node = TiltNode.START
+            elif i == len(run) - 1:
+                node = TiltNode.END
             else:
-                node = 2 if i == 0 else 3 if span.ending_auto or i == len(run) - 1 else 0
+                node = TiltNode.CONTINUE
             add(span, ControllerName.TILT, MANUAL_TILT_SCALE, node)
             report.count("manual_tilt_rows")
-    for i, point in enumerate(tilt):
-        if (
-            i not in covered
-            and not isinstance(point.incoming, AutoTilt)
-            and point.incoming == point.outgoing
-            and point.incoming != 0
-        ):
-            report.record(
-                "manual_tilt",
-                FeatureStatus.UNSUPPORTED,
-                f"/camera/tilt/{i}",
-                code="ISOLATED_TILT_VALUE",
-                message="Isolated manual tilt values are not converted.",
-                pulse=point.pulse,
-            )
     if any(not isinstance(point.incoming, AutoTilt) for point in camera.tilt):
         report.record(
             "manual_tilt",
