@@ -63,7 +63,9 @@ def _bpm_range(source: PackageMetadata, settings: SdvxMetadataSettings) -> tuple
     else:
         displays = {chart.display_bpm for chart in source.charts}
         if len(displays) != 1 or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", next(iter(displays))):
-            raise MetadataError("Supply bpm_min and bpm_max for variable or differing display BPM")
+            raise MetadataError(
+                "Supply bpm_min and bpm_max for missing, variable or differing display BPM"
+            )
         low = high = _bpm(next(iter(displays)))
     if low > high:
         raise MetadataError("bpm_min must not exceed bpm_max")

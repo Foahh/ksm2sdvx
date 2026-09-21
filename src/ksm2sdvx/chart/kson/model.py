@@ -22,7 +22,7 @@ class Metadata:
     chart_author: str
     difficulty: int | str
     level: int
-    disp_bpm: str
+    disp_bpm: str = ""
     optional: tuple[Extension, ...] = ()
 
 

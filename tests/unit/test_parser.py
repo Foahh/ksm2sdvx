@@ -17,6 +17,54 @@ def test_defaults_and_compact_forms() -> None:
     assert chart.beat.scroll_speed[0].incoming == 1.0
 
 
+@pytest.mark.parametrize("display", [{}, {"disp_bpm": ""}, {"disp_bpm": "120-180"}])
+def test_optional_display_bpm_does_not_control_chart_timing(display: dict[str, str]) -> None:
+    chart = parse_kson(
+        document(
+            meta={
+                "title": "Synthetic",
+                "artist": "Tests",
+                "chart_author": "Tests",
+                "difficulty": 2,
+                "level": 10,
+                **display,
+            },
+            beat={"bpm": [[0, 135], [960, 172.5]]},
+        )
+    ).chart
+    assert chart.meta.disp_bpm == display.get("disp_bpm", "")
+    result = convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
+    assert [event.bpm for event in result.chart.bpms] == [135, 172.5]
+
+
+@pytest.mark.parametrize("display", [None, True, 120, "fast", "120 BPM"])
+def test_display_bpm_still_requires_valid_text(display: object) -> None:
+    with pytest.raises(KsonValidationError, match="/meta/disp_bpm"):
+        parse_kson(
+            document(
+                meta={
+                    "title": "Synthetic",
+                    "artist": "Tests",
+                    "chart_author": "Tests",
+                    "difficulty": 2,
+                    "level": 10,
+                    "disp_bpm": display,
+                }
+            )
+        )
+
+
+@pytest.mark.parametrize("kind", ["spin", "half_spin"])
+@pytest.mark.parametrize("duration", [-1, 0.5, True])
+def test_spin_duration_must_be_a_nonnegative_integer(kind: str, duration: object) -> None:
+    with pytest.raises(KsonValidationError, match=f"/slam_event/{kind}/0/2"):
+        parse_kson(
+            document(
+                camera={"cam": {"pattern": {"laser": {"slam_event": {kind: [[0, 1, duration]]}}}}}
+            )
+        )
+
+
 @pytest.mark.parametrize(
     "note", [False, True, 5.9, [5.9, 0], [0, -5], [-5, 0], [0, True], [0, 1, 2], "0"]
 )

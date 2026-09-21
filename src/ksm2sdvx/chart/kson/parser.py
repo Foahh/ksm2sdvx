@@ -212,7 +212,7 @@ class Parser:
             author,
             difficulty,
             integer(required(data, "level", path), "/meta/level", 1),
-            string(required(data, "disp_bpm", path), "/meta/disp_bpm"),
+            string(data.get("disp_bpm", ""), "/meta/disp_bpm"),
             tuple(optional),
         )
 
@@ -364,7 +364,7 @@ class Parser:
                     SpinEvent(
                         KsonPulse(integer(row[0], p + "/0")),
                         integer(row[1], p + "/1", None),
-                        KsonDuration(integer(row[2], p + "/2", 1)),
+                        KsonDuration(integer(row[2], p + "/2")),
                         kind,
                         p,
                     )

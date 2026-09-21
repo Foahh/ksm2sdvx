@@ -70,7 +70,7 @@ def validate_kson(chart: KsonChart) -> None:
     ):
         check(type(value) is str, "expected string", f"/meta/{name}")
     check(
-        bool(re.fullmatch(r"[0-9.\-]+", meta.disp_bpm)), "invalid displayed BPM", "/meta/disp_bpm"
+        bool(re.fullmatch(r"[0-9.\-]*", meta.disp_bpm)), "invalid displayed BPM", "/meta/disp_bpm"
     )
     uint(meta.level, "/meta/level", 1)
     check(meta.level <= 20, "level must be 1..20", "/meta/level")
@@ -156,7 +156,7 @@ def validate_kson(chart: KsonChart) -> None:
             "direction must be -1 or 1",
             event.path,
         )
-        uint(event.duration, event.path + "/2", 1)
+        uint(event.duration, event.path + "/2")
     if chart.audio.bgm:
         bgm = chart.audio.bgm
         finite(bgm.volume, "/audio/bgm/vol")

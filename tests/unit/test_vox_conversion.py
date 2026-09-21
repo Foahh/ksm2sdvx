@@ -12,7 +12,7 @@ from ksm2sdvx.chart import (
 )
 from ksm2sdvx.chart.errors import ConversionError
 from ksm2sdvx.chart.vox.model import RollType, VoxFxHold
-from ksm2sdvx.common.diagnostics import FeatureStatus
+from ksm2sdvx.common.diagnostics import FeatureStatus, Severity
 
 
 @pytest.mark.parametrize(
@@ -57,6 +57,49 @@ def test_unrepresentable_spin_duration_is_not_rounded() -> None:
     ).chart
     with pytest.raises(ConversionError, match="cannot be rounded"):
         convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
+
+
+@pytest.mark.parametrize("kind", ["spin", "half_spin"])
+@pytest.mark.parametrize("pulse", [0, 1, 9600])
+def test_zero_duration_spin_leaves_lasers_and_chart_end_unchanged(kind: str, pulse: int) -> None:
+    chart = parse_kson(
+        document(
+            note={"laser": [[[0, [[0, [0, 1]]]]], []]},
+            camera={"cam": {"pattern": {"laser": {"slam_event": {kind: [[pulse, 1, 0]]}}}}},
+        )
+    ).chart
+    options = ConversionOptions(strict=True)
+    result = convert_chart(chart, options=options, profile=DEFAULT_PROFILE)
+    baseline = convert_chart(
+        replace(chart, camera=replace(chart.camera, spins=())),
+        options=options,
+        profile=DEFAULT_PROFILE,
+    )
+    assert result.chart == baseline.chart
+    assert result.report.end_pulse == baseline.report.end_pulse
+    assert result.report.counts["zero_duration_spin_events"] == 1
+    diagnostic = next(d for d in result.report.diagnostics if d.code == "ZERO_DURATION_SPIN")
+    assert diagnostic.severity == Severity.INFO and diagnostic.pulse == pulse
+    assert serialize_vox(result.chart) == serialize_vox(baseline.chart)
+
+
+def test_zero_duration_spin_does_not_claim_slam_from_half_spin() -> None:
+    chart = parse_kson(
+        document(
+            note={"laser": [[[0, [[0, [0, 1]]]]], []]},
+            camera={
+                "cam": {
+                    "pattern": {
+                        "laser": {"slam_event": {"spin": [[0, 1, 0]], "half_spin": [[0, 1, 240]]}}
+                    }
+                }
+            },
+        )
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
+    point = result.chart.original_left[0]
+    assert (point.roll_type, point.roll_length) == (RollType.SWING, 2)
+    assert result.report.end_pulse == 480
 
 
 def test_original_tracks_only_contain_source_anchors_and_jumps() -> None:

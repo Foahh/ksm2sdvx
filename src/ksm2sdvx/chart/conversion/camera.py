@@ -45,6 +45,17 @@ def attach_spins(
     assigned: set[int] = set()
     end = 0
     for event in events:
+        if event.duration == 0:
+            report.count("zero_duration_spin_events")
+            report.record(
+                "spin",
+                FeatureStatus.CONVERTED,
+                event.path,
+                code="ZERO_DURATION_SPIN",
+                message="Zero-duration camera event has no animation; no VOX roll is emitted.",
+                pulse=event.pulse,
+            )
+            continue
         ticks(event.pulse)
         ticks(event.duration)
         if event.duration <= 0 or event.duration % 60:
