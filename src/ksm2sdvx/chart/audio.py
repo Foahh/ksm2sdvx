@@ -224,9 +224,17 @@ def compile_chart_audio(
                     )
                 )
 
-    laser_events = {
-        0: AudioLaserInvocation(0, "peaking_filter" if "peaking_filter" in known["laser"] else None)
-    }
+    default_laser = next(
+        (
+            effect.name
+            for effect in effects
+            if effect.bus == "laser"
+            and effect.name == "peaking_filter"
+            and effect.type != "switch_audio"
+        ),
+        None,
+    )
+    laser_events = {0: AudioLaserInvocation(0, default_laser)}
     for event in chart.audio.laser.invocations:
         effect = event.effect if event.effect in known["laser"] else None
         laser_events[event.pulse] = AudioLaserInvocation(clock.frame(event.pulse), effect)

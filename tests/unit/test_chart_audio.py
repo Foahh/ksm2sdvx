@@ -146,6 +146,31 @@ def test_laser_jumps_wide_coordinates_and_bpm_crossing_keep_source_graph() -> No
     assert laser.end_frame == 44100
 
 
+def test_switch_audio_named_peaking_filter_requires_an_explicit_event() -> None:
+    chart = parse_kson(
+        document(
+            audio={
+                "audio_effect": {
+                    "laser": {
+                        "def": [
+                            [
+                                "peaking_filter",
+                                {"type": "switch_audio", "v": {"filename": "alternate.ogg"}},
+                            ]
+                        ],
+                        "pulse_event": {"peaking_filter": [240]},
+                    }
+                }
+            }
+        )
+    ).chart
+    program = compile_chart_audio(chart)
+    assert [(e.frame, e.effect) for e in program.laser_events] == [
+        (0, None),
+        (22050, "peaking_filter"),
+    ]
+
+
 def test_keysound_resources_ignore_events_without_chips() -> None:
     chart = parse_kson(
         document(
