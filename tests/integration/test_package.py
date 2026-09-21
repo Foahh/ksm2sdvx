@@ -262,7 +262,7 @@ def test_package_strict_rejects_unconverted_metadata_before_output(tmp_path: Pat
     chart = manifest.parent / "chart.kson"
     data = cast(dict[str, object], json.loads(chart.read_text(encoding="utf-8")))
     metadata = cast(dict[str, object], data["meta"])
-    metadata["information"] = "A source-only annotation"
+    metadata["std_bpm"] = 150
     chart.write_text(json.dumps(data), encoding="utf-8")
     output = tmp_path / "mod"
     with pytest.raises(PackageError, match="omit metadata"):
@@ -346,6 +346,48 @@ def _stub_package_media(monkeypatch: pytest.MonkeyPatch) -> _PackageMusic:
     monkeypatch.setattr("ksm2sdvx.pipeline.build.FfmpegMusicProcessor", make_music)
     monkeypatch.setattr("ksm2sdvx.pipeline.build.FfmpegJacketProcessor", _PackageJackets)
     return music
+
+
+def test_package_ignores_source_presentation_and_reports_metadata_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = _inputs(tmp_path)
+    chart = manifest.parent / "chart.kson"
+    data = cast(dict[str, object], json.loads(chart.read_text(encoding="utf-8")))
+    metadata = cast(dict[str, object], data["meta"])
+    metadata.update(
+        information="Source-only annotation",
+        title_img_filename="missing-title.png",
+        artist_img_filename="../missing-artist.png",
+        icon_filename="missing-icon.png",
+    )
+    data["bg"] = {"movie": {"filename": "../unused-movie.mp4"}}
+    chart.write_text(json.dumps(data), encoding="utf-8")
+    _stub_package_media(monkeypatch)
+    output = tmp_path / "mod"
+    result = build_package(
+        load_package_config(manifest),
+        destination=output,
+        options=ConversionOptions(strict=True),
+        profile=DEFAULT_PROFILE,
+        renderer=_PackageRenderer(),
+    )
+    assert not result.diagnostics
+    report = cast(dict[str, object], json.loads((output / "ksm2sdvx-report.json").read_text()))
+    defaults = cast(dict[str, object], report["metadata"])["defaulted_fields"]
+    assert defaults == [
+        f"difficulty/exhaust/{field}"
+        for field in (
+            "radar/notes",
+            "radar/peak",
+            "radar/tsumami",
+            "radar/tricky",
+            "radar/hand-trip",
+            "radar/one-hand",
+            "max_exscore",
+        )
+    ]
+    assert not any("missing" in path.name or "movie" in path.name for path in result.files)
 
 
 @pytest.mark.parametrize("with_jacket", [False, True])

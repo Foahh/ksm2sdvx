@@ -5,7 +5,6 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from xml.etree import ElementTree as ET
 
-from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.metadata.errors import MetadataError
 from ksm2sdvx.metadata.models import (
     MAX_SONG_ID,
@@ -70,10 +69,6 @@ def _bpm_range(source: PackageMetadata, settings: SdvxMetadataSettings) -> tuple
     if low > high:
         raise MetadataError("bpm_min must not exceed bpm_max")
     return low, high
-
-
-def _diagnostic(code: str, message: str) -> Diagnostic:
-    return Diagnostic(code, Severity.WARNING, Stage.METADATA, message, "metadata")
 
 
 def _jacket_author(source: ChartMetadata, assignment: ChartAssignment) -> str:
@@ -261,22 +256,7 @@ class SdvxMetadataConverter:
         )
         # Verify encoding while conversion errors still have their metadata context.
         serialize_music_database(metadata)
-        diagnostics: list[Diagnostic] = []
-        if any(not assignment.radar.complete for assignment in settings.charts):
-            diagnostics.append(
-                _diagnostic(
-                    "RADAR_NOT_COMPUTED",
-                    "Unspecified radar values are set to zero; chart radar analysis is not implemented.",
-                )
-            )
-        if any(assignment.max_exscore is None for assignment in settings.charts):
-            diagnostics.append(
-                _diagnostic(
-                    "MAX_EXSCORE_NOT_COMPUTED",
-                    "Unspecified max_exscore values are set to zero; provide explicit values when needed.",
-                )
-            )
-        return MetadataResult(metadata, tuple(diagnostics))
+        return MetadataResult(metadata)
 
 
 def serialize_music_database(metadata: SdvxMetadata) -> bytes:

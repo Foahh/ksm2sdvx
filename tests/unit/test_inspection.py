@@ -66,8 +66,8 @@ def test_presets_keysounds_and_nested_assets(tmp_path: Path) -> None:
         SourcePackage(tmp_path, (chart,)), options=ConversionOptions(), profile=DEFAULT_PROFILE
     )
     assert inspection.valid
-    assert {a.name for a in inspection.assets} == {"../custom.wav", "nowprinting1", "desert"}
-    assert sum(a.preset for a in inspection.assets) == 2
+    assert {a.name for a in inspection.assets} == {"../custom.wav", "nowprinting1"}
+    assert sum(a.preset for a in inspection.assets) == 1
     assert (
         next(a for a in inspection.assets if not a.preset).resolved_path == tmp_path / "custom.wav"
     )

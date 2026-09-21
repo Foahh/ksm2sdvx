@@ -59,10 +59,7 @@ def test_new_song_fragment_fields_slots_encoding_and_names() -> None:
     assert payload.jacket_filename(ChartSlot.EXHAUST) == "jk_3000_3.png"
     assert payload.jacket_filename(ChartSlot.MAXIMUM, "big") == "jk_3000_5_b.png"
     assert payload.jacket_filename(ChartSlot.ULTIMATE, "small") == "jk_3000_6_s.png"
-    assert {item.code for item in result.diagnostics} == {
-        "RADAR_NOT_COMPUTED",
-        "MAX_EXSCORE_NOT_COMPUTED",
-    }
+    assert not result.diagnostics
     assert source.charts[0].audio_offset == 120
 
 
@@ -97,7 +94,6 @@ def test_explicit_shared_values_and_per_chart_values() -> None:
     assert xml.findtext("music/difficulty/exhaust/price") == "-2"
     assert xml.findtext("music/difficulty/exhaust/limited") == "3"
     assert result.metadata.volume == 90 and result.metadata.version == 6
-    assert "MAX_EXSCORE_NOT_COMPUTED" not in {item.code for item in result.diagnostics}
 
 
 def test_database_controls_and_complete_radar_are_serialized() -> None:
@@ -148,13 +144,10 @@ def test_database_controls_and_complete_radar_are_serialized() -> None:
         ("one-hand", "65535", "u16"),
     ]
     assert all(node.text == "0" for node in xml.findall("music/difficulty/novice/radar/*"))
-    assert "RADAR_NOT_COMPUTED" not in {item.code for item in result.diagnostics}
 
 
-@pytest.mark.parametrize(
-    "radar,warning", [(ChartRadar(notes=12), True), (ChartRadar(0, 0, 0, 0, 0, 0), False)]
-)
-def test_radar_defaults_only_unspecified_axes(radar: ChartRadar, warning: bool) -> None:
+@pytest.mark.parametrize("radar", [ChartRadar(notes=12), ChartRadar(0, 0, 0, 0, 0, 0)])
+def test_radar_defaults_only_unspecified_axes(radar: ChartRadar) -> None:
     configuration = replace(settings(), charts=(replace(settings().charts[0], radar=radar),))
     result = SdvxMetadataConverter().convert(
         PackageMetadata((chart_metadata(),)), settings=configuration
@@ -162,7 +155,6 @@ def test_radar_defaults_only_unspecified_axes(radar: ChartRadar, warning: bool) 
     values = result.metadata.entry.child("difficulty").child("exhaust").child("radar")
     assert values.child("notes").text == str(radar.notes)
     assert values.child("peak").text == "0"
-    assert ("RADAR_NOT_COMPUTED" in {item.code for item in result.diagnostics}) == warning
 
 
 @pytest.mark.parametrize("value", [-1, 65536, True])

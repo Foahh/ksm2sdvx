@@ -15,6 +15,7 @@ from ksm2sdvx.chart import (
     load_kson,
 )
 from ksm2sdvx.chart.audio import ChartAudioProgram, apply_rendered_audio, compile_chart_audio
+from ksm2sdvx.chart.conversion.source_policy import IGNORED_RESOURCE_ROLES, ignored_source_path
 from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.common.types import JsonValue
 from ksm2sdvx.jacket import (
@@ -116,7 +117,8 @@ def _load_charts(
         references.extend(
             ResourceInput(path, ref)
             for ref in parsed.chart.assets
-            if not (jacket is not None and ref.role == "jacket")
+            if ref.role not in IGNORED_RESOURCE_ROLES
+            and not (jacket is not None and ref.role == "jacket")
         )
         if jacket is not None:
             jacket = jacket.resolve()
@@ -218,10 +220,15 @@ def _build_package(
     }
     for chart in charts:
         for field in chart.source.meta.optional:
-            if field.path in {
-                "/meta/jacket_filename",
-                "/meta/jacket_author",
-            } or field.path.endswith("_filename"):
+            if (
+                field.path
+                in {
+                    "/meta/jacket_filename",
+                    "/meta/jacket_author",
+                }
+                or field.path.endswith("_filename")
+                or ignored_source_path(field.path)
+            ):
                 continue
             if options.strict:
                 raise PackageError(f"Strict package conversion would omit metadata at {field.path}")
@@ -438,15 +445,6 @@ def _build_package(
                 )
                 resources.append(PackageResource(result.resource, path))
                 diagnostics.extend(result.diagnostics)
-        diagnostics.append(
-            Diagnostic(
-                "PACKAGE_MEDIA_CONVERTED",
-                Severity.INFO,
-                Stage.PACKAGE,
-                "Music and preview files were produced, along with any supplied jackets.",
-                "package",
-            )
-        )
         diagnostics = [_portable_diagnostic(d, config.root) for d in diagnostics]
         package = SdvxPackage(
             tuple(
@@ -466,6 +464,20 @@ def _build_package(
             "name": config.name,
             "profile": profile.name,
             "options": options.to_dict(),
+            "metadata": {
+                "defaulted_fields": tuple(
+                    f"difficulty/{assignment.slot.value}/{field}"
+                    for assignment in assignments
+                    for field in (
+                        *(
+                            f"radar/{name}"
+                            for name, value in assignment.radar.items()
+                            if value is None
+                        ),
+                        *(("max_exscore",) if assignment.max_exscore is None else ()),
+                    )
+                ),
+            },
             "charts": tuple(
                 {
                     "source": chart.binding.path.relative_to(config.root).as_posix(),

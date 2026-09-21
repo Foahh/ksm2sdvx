@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from ksm2sdvx.chart import ConversionOptions, VoxProfile, convert_chart, load_kson
+from ksm2sdvx.chart.conversion.source_policy import IGNORED_RESOURCE_ROLES
 from ksm2sdvx.common.diagnostics import Diagnostic
 from ksm2sdvx.pipeline.models import InspectedChart, PackageInspection, SourcePackage
 from ksm2sdvx.resources.discovery import discover_resources
@@ -44,7 +45,11 @@ def inspect_package(
         charts.append(InspectedChart(path, output_name, parsed.chart, result, parsed.diagnostics))
         diagnostics.extend(parsed.diagnostics)
         diagnostics.extend(replace(d, source_path=str(path)) for d in result.report.diagnostics)
-        references.extend(ResourceInput(path, reference) for reference in parsed.chart.assets)
+        references.extend(
+            ResourceInput(path, reference)
+            for reference in parsed.chart.assets
+            if reference.role not in IGNORED_RESOURCE_ROLES
+        )
     inventory = discover_resources(references, root=root)
     diagnostics.extend(inventory.diagnostics)
     return PackageInspection(root, tuple(charts), inventory.assets, tuple(diagnostics))
