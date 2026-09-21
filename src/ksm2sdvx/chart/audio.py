@@ -185,7 +185,6 @@ def compile_chart_audio(
             else:
                 coverage.append(event.path)
             invocations[event.pulse] = event
-        consumed: set[int] = set()
         for note in notes:
             if not note.duration:
                 continue
@@ -196,7 +195,6 @@ def compile_chart_audio(
                 key=lambda e: e.pulse,
             )
             for index, event in enumerate(events):
-                consumed.add(event.pulse)
                 if event.effect not in known["fx"]:
                     continue
                 end = events[index + 1].pulse if index + 1 < len(events) else hold_end
@@ -208,19 +206,6 @@ def compile_chart_audio(
                         clock.frame(note.pulse),
                         event.effect,
                         event.parameters,
-                    )
-                )
-        for event in invocations.values():
-            if event.pulse not in consumed:
-                diagnostics.append(
-                    Diagnostic(
-                        "IGNORED_FX_EVENT",
-                        Severity.INFO,
-                        Stage.CONVERT,
-                        "FX invocation outside a hold has no audio effect.",
-                        "audio_effect",
-                        event.path,
-                        event.pulse,
                     )
                 )
 
@@ -272,17 +257,6 @@ def compile_chart_audio(
     for chip in chart.audio.key_sound.chips:
         coverage.append(chip.path)
         if (chip.lane, chip.pulse) not in positions:
-            diagnostics.append(
-                Diagnostic(
-                    "IGNORED_CHIP_KEYSOUND",
-                    Severity.INFO,
-                    Stage.CONVERT,
-                    "Keysound invocation without an FX chip has no audio effect.",
-                    "keysound",
-                    chip.path,
-                    chip.pulse,
-                )
-            )
             continue
         chips.append(
             AudioKeySound(clock.frame(chip.pulse), chip.lane, chip.sample, chip.volume, chip.pulse)
@@ -346,7 +320,13 @@ def apply_rendered_audio(
     report = replace(
         result.report,
         options=options,
-        diagnostics=tuple(d for d in result.report.diagnostics if d.json_pointer not in coverage)
+        diagnostics=tuple(
+            d
+            for d in result.report.diagnostics
+            if d.code != "AUDIO_RENDERING_REQUIRED"
+            and d.json_pointer not in coverage
+            and d.json_pointer not in unsupported
+        )
         + program.diagnostics,
         features=tuple(
             replace(f, status=FeatureStatus.UNSUPPORTED)

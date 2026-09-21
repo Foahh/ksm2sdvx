@@ -33,7 +33,8 @@ def test_chart_command_and_report(tmp_path: Path) -> None:
     assert output.exists() and b"\r" not in output.read_bytes()
     report = cast(dict[str, object], json.loads(output.with_suffix(".report.json").read_text()))
     assert report["schema_version"] == 1 and "features" in report
-    assert "UTF8_BOM" in result.stderr
+    assert not result.stderr
+    assert report["diagnostics"] == []
 
 
 def test_inspect_command_does_not_write(tmp_path: Path) -> None:
@@ -49,7 +50,7 @@ def test_inspect_command_does_not_write(tmp_path: Path) -> None:
 
 def test_cli_failure_codes_and_strict_no_output(tmp_path: Path) -> None:
     source = tmp_path / "chart.kson"
-    source.write_text(document(beat={"bpm": [[0, 120]], "stop": [[240, 240]]}), encoding="utf-8")
+    source.write_text(document(camera={"cam": {"body": {"zoom_side": [[0, 1]]}}}), encoding="utf-8")
     result = run_cli(tmp_path, "chart", str(source), "--strict")
     assert result.returncode == 1 and "Strict conversion" in result.stderr
     assert not (tmp_path / "output").exists()

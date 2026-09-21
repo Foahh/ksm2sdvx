@@ -98,7 +98,7 @@ def test_mid_hold_changes_and_separate_lane_precedence_data() -> None:
         ("gate", 0, 22050, 33075, 0),
     ]
     assert len(program.fx_holds) == 3
-    assert [d.pulse for d in program.diagnostics if d.code == "IGNORED_FX_EVENT"] == [500]
+    assert not program.diagnostics
 
 
 def test_definition_order_and_inactive_parameter_values_are_preserved() -> None:
@@ -190,7 +190,7 @@ def test_keysound_resources_ignore_events_without_chips() -> None:
     program = compile_chart_audio(chart)
     assert [(k.resource_id, k.volume) for k in program.keysounds] == [("clap", 1), ("hit.wav", 0.5)]
     assert [(r.name, r.preset) for r in program.resources] == [("clap", True), ("hit.wav", False)]
-    assert len([d for d in program.diagnostics if d.code == "IGNORED_CHIP_KEYSOUND"]) == 2
+    assert not program.diagnostics
 
 
 def test_switch_audio_resources_and_invocations() -> None:
@@ -319,6 +319,7 @@ def test_render_coverage_disables_native_processing_and_preserves_chips(sample: 
     result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
     with pytest.raises(UnsupportedFeaturesError):
         convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
+    assert [d.code for d in result.report.diagnostics] == ["AUDIO_RENDERING_REQUIRED"]
     rendered = apply_rendered_audio(
         result,
         chart,
@@ -338,6 +339,7 @@ def test_render_coverage_disables_native_processing_and_preserves_chips(sample: 
     assert all(n.effect == 6 for n in rendered.chart.original_left)
     assert not rendered.chart.auto_tab
     assert not any(f.status == FeatureStatus.UNSUPPORTED for f in rendered.report.features)
+    assert not rendered.report.diagnostics
 
 
 def test_render_coverage_cannot_hide_non_audio_strict_omissions() -> None:

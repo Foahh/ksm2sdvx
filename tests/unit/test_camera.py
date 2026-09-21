@@ -212,7 +212,6 @@ def test_instantaneous_tilt_turn_is_removed_without_changing_following_ramp(turn
     assert rows[-2].start_value == 0
     assert rows[-2].end_value == rows[-1].start_value
     assert rows[-1].end_value == pytest.approx(MANUAL_TILT_SCALE)
-    assert "TILT_JUMP_REBASED" in {d.code for d in result.report.diagnostics}
 
 
 @pytest.mark.parametrize("end", [-72, -36, 36, 72])
@@ -406,7 +405,6 @@ def test_zero_tilt_holds_during_lasers_then_restores_automatic_mode(mode: str, c
     assert hold.start_value == hold.end_value == 0
     assert result.chart.tilt_modes[-1].position == VoxPosition(1, 3, VoxTick(0))
     assert result.chart.tilt_modes[-1].mode == code
-    assert "ZERO_TILT_MAPPING" in {d.code for d in result.report.diagnostics}
     assert not any(f.status == FeatureStatus.UNSUPPORTED for f in result.report.features)
 
 

@@ -7,6 +7,30 @@ from ksm2sdvx.common.diagnostics import Diagnostic, FeatureResult, FeatureStatus
 from ksm2sdvx.common.types import JsonValue
 
 
+def summarize_audio_diagnostics(diagnostics: tuple[Diagnostic, ...]) -> tuple[Diagnostic, ...]:
+    """Summarize standalone rendering requirements without per-event warning spam."""
+    rendering_codes = {
+        "UNSUPPORTED_EFFECT_DEFINITION",
+        "UNSUPPORTED_EFFECT_EVENT",
+        "UNSUPPORTED_EFFECT_PARAMETER",
+        "UNSUPPORTED_KEYSOUND",
+    }
+    requires_rendering = tuple(d for d in diagnostics if d.code in rendering_codes)
+    if not requires_rendering:
+        return diagnostics
+    return tuple(d for d in diagnostics if d.code not in rendering_codes) + (
+        Diagnostic(
+            "AUDIO_RENDERING_REQUIRED",
+            Severity.WARNING,
+            Stage.CONVERT,
+            "Authored effects or keysounds are absent from chart-only output; "
+            "use package conversion to render supported audio.",
+            "audio",
+            "/audio",
+        ),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ConversionReport:
     profile: str

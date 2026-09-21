@@ -12,7 +12,7 @@ from ksm2sdvx.chart import (
 )
 from ksm2sdvx.chart.errors import ConversionError
 from ksm2sdvx.chart.vox.model import RollType, VoxFxHold
-from ksm2sdvx.common.diagnostics import FeatureStatus, Severity
+from ksm2sdvx.common.diagnostics import FeatureStatus
 
 
 @pytest.mark.parametrize(
@@ -38,7 +38,7 @@ def test_spin_encoding_and_full_duration_end(
     point = result.chart.original_left[0]
     assert (point.roll_type, point.roll_length) == (roll_type, roll_length)
     assert result.report.end_pulse == 2 * duration
-    assert any(d.code == "SPIN_DURATION_MAPPING" for d in result.report.diagnostics)
+    assert not result.report.diagnostics
     assert any(
         f.feature == "spin" and f.status == FeatureStatus.APPROXIMATED
         for f in result.report.features
@@ -78,8 +78,7 @@ def test_zero_duration_spin_leaves_lasers_and_chart_end_unchanged(kind: str, pul
     assert result.chart == baseline.chart
     assert result.report.end_pulse == baseline.report.end_pulse
     assert result.report.counts["zero_duration_spin_events"] == 1
-    diagnostic = next(d for d in result.report.diagnostics if d.code == "ZERO_DURATION_SPIN")
-    assert diagnostic.severity == Severity.INFO and diagnostic.pulse == pulse
+    assert not result.report.diagnostics
     assert serialize_vox(result.chart) == serialize_vox(baseline.chart)
 
 

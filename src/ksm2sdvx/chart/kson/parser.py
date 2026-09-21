@@ -42,7 +42,7 @@ from ksm2sdvx.chart.kson.model import (
 )
 from ksm2sdvx.chart.kson.validation import check, ordered, validate_graph, validate_kson
 from ksm2sdvx.chart.types import KsonDuration, KsonPulse, MeasureIndex
-from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
+from ksm2sdvx.common.diagnostics import Diagnostic
 from ksm2sdvx.common.types import JsonValue, Milliseconds
 from ksm2sdvx.resources.models import ResourceReference
 
@@ -674,15 +674,6 @@ def parse_kson(text: str) -> ParsedKson:
     diagnostics: list[Diagnostic] = []
     if text.startswith("\ufeff"):
         text = text[1:]
-        diagnostics.append(
-            Diagnostic(
-                "UTF8_BOM",
-                Severity.WARNING,
-                Stage.PARSE,
-                "Accepted a UTF-8 BOM; KSON specifies UTF-8 without BOM.",
-                "encoding",
-            )
-        )
     try:
         raw: object = json.loads(text, object_pairs_hook=_pairs)
     except (ValueError, RecursionError) as exc:

@@ -49,8 +49,6 @@ def convert_scroll_speed(
             "scroll_speed",
             FeatureStatus.APPROXIMATED,
             path,
-            code="SAMPLED_SCROLL_SPEED",
-            message=f"Scroll-speed ramps use instantaneous updates every {step} KSON pulses.",
         )
     else:
         report.record("scroll_speed", FeatureStatus.CONVERTED, path)

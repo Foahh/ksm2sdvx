@@ -122,7 +122,8 @@ def test_decode_errors_version_and_bom() -> None:
     with pytest.raises(UnsupportedFormatError):
         parse_kson(document(format_version=2))
     parsed = parse_kson("\ufeff" + document())
-    assert parsed.diagnostics[0].code == "UTF8_BOM"
+    assert parsed.chart == parse_kson(document()).chart
+    assert not parsed.diagnostics
 
 
 def test_graph_and_tilt_unions() -> None:

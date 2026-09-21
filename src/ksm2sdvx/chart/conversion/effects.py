@@ -1,6 +1,7 @@
 """Chart feature accounting and effect support diagnostics."""
 
 from ksm2sdvx.chart.conversion.report import ReportBuilder
+from ksm2sdvx.chart.conversion.source_policy import ignored_source_path
 from ksm2sdvx.chart.kson.model import KsonChart
 from ksm2sdvx.common.diagnostics import FeatureStatus
 
@@ -10,16 +11,12 @@ def report_unconverted(chart: KsonChart, report: ReportBuilder) -> None:
         "metadata",
         FeatureStatus.DEFERRED,
         "/meta",
-        code="PACKAGE_METADATA",
-        message="Metadata is preserved as package data; VOX chart text has no metadata mapping.",
     )
     if chart.assets or chart.audio.bgm:
         report.record(
             "assets",
             FeatureStatus.DEFERRED,
             "/audio",
-            code="PACKAGE_ASSETS",
-            message="Asset references and BGM settings are preserved; asset processing is deferred.",
         )
     for name, group in (("fx", chart.audio.fx), ("laser", chart.audio.laser)):
         base = f"/audio/audio_effect/{name}"
@@ -91,14 +88,8 @@ def report_unconverted(chart: KsonChart, report: ReportBuilder) -> None:
             message="Legacy alternate BGM routing is not rendered.",
         )
     for field in chart.retained:
-        if field.path in ("/editor", "/compat"):
-            report.record(
-                field.path[1:],
-                FeatureStatus.DEFERRED,
-                field.path,
-                code="RETAINED_SOURCE_DATA",
-                message="Source annotations retained as package data.",
-            )
+        if ignored_source_path(field.path):
+            continue
         elif field.value:
             report.record(
                 field.path[1:],
@@ -108,6 +99,8 @@ def report_unconverted(chart: KsonChart, report: ReportBuilder) -> None:
                 message="Source feature is retained but has no VOX mapping.",
             )
     for field in chart.extensions:
+        if ignored_source_path(field.path):
+            continue
         report.record(
             "extension",
             FeatureStatus.UNSUPPORTED,

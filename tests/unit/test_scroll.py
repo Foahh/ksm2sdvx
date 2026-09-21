@@ -64,7 +64,7 @@ def test_delayed_first_point_holds_incoming_before_jump() -> None:
 def test_linear_ramp_is_sampled_and_endpoint_jump_wins() -> None:
     result = convert([[0, 1], [60, [2, 0]], [120, 0]])
     assert samples(result) == [(15, 1.25), (30, 1.5), (45, 1.75), (60, 0)]
-    assert "SAMPLED_SCROLL_SPEED" in {d.code for d in result.report.diagnostics}
+    assert not result.report.diagnostics
     assert next(f for f in result.report.features if f.feature == "scroll_speed").status == (
         FeatureStatus.APPROXIMATED
     )
@@ -137,7 +137,7 @@ def test_delayed_negative_speed_holds_before_first_anchor_and_after_last() -> No
 def test_signed_ramps_cross_zero(points: object, expected: list[tuple[int, float]]) -> None:
     result = convert(points)
     assert samples(result) == expected
-    assert "SAMPLED_SCROLL_SPEED" in {d.code for d in result.report.diagnostics}
+    assert not result.report.diagnostics
 
 
 @pytest.mark.parametrize("locked", [False, True])

@@ -10,7 +10,11 @@ from ksm2sdvx.chart.conversion.effects import report_unconverted
 from ksm2sdvx.chart.conversion.lasers import convert_lasers
 from ksm2sdvx.chart.conversion.options import ConversionOptions
 from ksm2sdvx.chart.conversion.profiles import VoxProfile
-from ksm2sdvx.chart.conversion.report import ConversionReport, ReportBuilder
+from ksm2sdvx.chart.conversion.report import (
+    ConversionReport,
+    ReportBuilder,
+    summarize_audio_diagnostics,
+)
 from ksm2sdvx.chart.conversion.scroll import convert_scroll_speed
 from ksm2sdvx.chart.conversion.timing import Timeline
 from ksm2sdvx.chart.errors import ConversionError
@@ -106,7 +110,7 @@ def convert_chart(
         options,
         KsonPulse(end),
         MappingProxyType(dict(report.counts)),
-        tuple(report.diagnostics),
+        summarize_audio_diagnostics(tuple(report.diagnostics)),
         tuple(report.features),
     )
     if options.strict and any(f.status == FeatureStatus.UNSUPPORTED for f in report.features):

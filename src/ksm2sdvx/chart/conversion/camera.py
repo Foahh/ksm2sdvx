@@ -54,8 +54,6 @@ def attach_spins(
                 "spin",
                 FeatureStatus.CONVERTED,
                 event.path,
-                code="ZERO_DURATION_SPIN",
-                message="Zero-duration camera event has no animation; no VOX roll is emitted.",
                 pulse=event.pulse,
             )
             continue
@@ -129,11 +127,6 @@ def attach_spins(
             "spin",
             FeatureStatus.APPROXIMATED,
             event.path,
-            code="SPIN_DURATION_MAPPING",
-            message=(
-                "VOX total roll/swing duration is set to twice the source duration; "
-                "the motion shapes differ. Long single spins remain single rolls."
-            ),
             pulse=event.pulse,
         )
         end = max(end, event.pulse + length * 2)
@@ -246,8 +239,6 @@ def convert_camera(
                 name,
                 FeatureStatus.APPROXIMATED,
                 path,
-                code="CAMERA_GEOMETRY_MAPPING",
-                message="Zoom approximates lane width and height.",
             )
             if any(p.control.curved for p in points[:-1]):
                 report.record(
@@ -315,8 +306,6 @@ def convert_camera(
             "manual_tilt",
             FeatureStatus.CONVERTED,
             "/camera/tilt",
-            code="TILT_JUMP_REBASED",
-            message="Removed extra turns from tilt jumps.",
         )
 
     supported_modes = {AutoTilt.NORMAL: 0, AutoTilt.BIGGER: 1, AutoTilt.KEEP_BIGGER: 2}
@@ -386,16 +375,12 @@ def convert_camera(
             "tilt_mode",
             FeatureStatus.APPROXIMATED,
             "/camera/tilt",
-            code="ZERO_TILT_MAPPING",
-            message="Zero tilt uses a manual hold; transitions may differ.",
         )
     if any(not isinstance(point.incoming, AutoTilt) for point in camera.tilt):
         report.record(
             "manual_tilt",
             FeatureStatus.APPROXIMATED,
             "/camera/tilt",
-            code="TILT_SCALE_MAPPING",
-            message="Manual tilt uses -8/19; target motion may differ.",
         )
         if any(point.control.curved for point in camera.tilt[:-1]):
             report.record(
