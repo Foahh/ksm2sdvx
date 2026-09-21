@@ -14,5 +14,5 @@ class MusicProcessor[SettingsT](Protocol):
 
 class S3vEncoder(Protocol):
     def encode(self, source: Path, destination: Path) -> None:
-        """Encode 44.1 kHz 16-bit stereo WAV to WMA Professional in ASF."""
+        """Encode stereo 44.1 kHz 16-bit WAV as ASF/WMA Professional with an S3V footer."""
         ...

@@ -173,8 +173,9 @@ including when the supplied values are zero.
 
 ## Music and artwork
 
-Music and previews use ASF containers with WMA Professional audio, stereo at
-44.1 kHz and approximately 384 kb/s. Positive KSON offsets trim the beginning;
+Music and previews use ASF containers with WMA Professional audio and a 32-byte
+`S3V0` footer required for game playback, stereo at 44.1 kHz and approximately
+384 kb/s. Positive KSON offsets trim the beginning;
 negative offsets add silence. Preview intervals refer to the original audio
 file. Package creation chooses one gain from the full track's integrated loudness
 and the peak headroom of both the full track and preview.

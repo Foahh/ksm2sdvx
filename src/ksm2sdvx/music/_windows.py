@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 from uuid import UUID
 
+from ksm2sdvx.music._s3v import serialize_s3v, validate_s3v
 from ksm2sdvx.music.errors import MusicError
 
 
@@ -170,7 +171,7 @@ def _find_stream(manager: _Com, stack: ExitStack) -> _Com:
 
 
 class WindowsWmaProEncoder:
-    """Encode an ASF .s3v file with the installed Windows WMA Professional codec."""
+    """Encode WMA Professional audio and frame it as S3V."""
 
     def encode(self, source: Path, destination: Path) -> None:
         if sys.platform != "win32":
@@ -222,6 +223,10 @@ class WindowsWmaProEncoder:
                 writer.checked(11, ())
                 _write_pcm(writer, pcm)
                 writer.checked(12, ())
+            # Close the ASF writer before appending the separate S3V footer.
+            encoded = serialize_s3v(destination.read_bytes())
+            validate_s3v(encoded)
+            destination.write_bytes(encoded)
         except (OSError, EOFError, wave.Error) as exc:
             raise MusicError(f"Unable to encode audio: {exc}") from exc
         finally:

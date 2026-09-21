@@ -198,6 +198,9 @@ def test_audio_command_defaults_and_preview(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert custom.read_bytes().startswith(bytes.fromhex("3026b275"))
+    for path in (output, custom):
+        data = path.read_bytes()
+        assert struct.unpack("<4sII", data[-32:-20]) == (b"S3V0", 32, len(data) - 32)
     assert source.read_bytes() == before
 
 

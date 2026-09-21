@@ -199,7 +199,9 @@ maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
 `FfmpegMusicProcessor.process_song` selects one constant gain using the full
 track's loudness and both full-track and preview peak headroom. The default target
 is −11 LUFS. Standalone `process` converts one requested interval. The Windows
-encoder produces WMA Professional audio; there is no alternate-codec fallback.
+encoder produces WMA Professional audio, closes the ASF payload, then appends
+and validates the required S3V footer. Plain ASF files renamed to `.s3v` are not
+valid game output. There is no alternate-codec fallback.
 `FfmpegJacketProcessor` produces RGB PNGs at the four supported sizes, always
 preserving the full image's aspect ratio with black margins (contain).
 

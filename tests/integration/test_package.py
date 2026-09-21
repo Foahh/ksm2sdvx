@@ -215,6 +215,9 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     assert (expected_music / "3000_synthetic_2a.vox").is_file()
     assert (expected_music / "3000_synthetic.s3v").stat().st_size > 0
     assert (expected_music / "3000_synthetic_pre.s3v").stat().st_size > 0
+    for audio in expected_music.glob("*.s3v"):
+        data = audio.read_bytes()
+        assert struct.unpack("<4sII", data[-32:-20]) == (b"S3V0", 32, len(data) - 32)
     for suffix, size in (("", 300), ("_s", 108), ("_b", 676)):
         assert struct.unpack_from(
             ">II", (expected_music / f"jk_3000_3{suffix}.png").read_bytes(), 16

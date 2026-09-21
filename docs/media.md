@@ -15,9 +15,9 @@ uv run ksm2sdvx audio music.ogg --target-lufs -11 --offset-ms 120
 uv run ksm2sdvx audio music.ogg --preview-start-ms 30000 --preview-duration-ms 15000
 ```
 
-Output is ASF with WMA Professional audio, stereo at 44.1 kHz and approximately
-384 kb/s. The default path is `output/<stem>.s3v`; a preview defaults to
-`output/<stem>_pre.s3v`.
+Output is ASF with WMA Professional audio and a required 32-byte `S3V0` footer,
+stereo at 44.1 kHz and approximately 384 kb/s. The default path is
+`output/<stem>.s3v`; a preview defaults to `output/<stem>_pre.s3v`.
 
 | Argument or option | Default | Behavior and constraints |
 | --- | --- | --- |

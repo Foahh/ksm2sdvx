@@ -246,6 +246,8 @@ def test_native_s3v_codec_and_loudness(tmp_path: Path, ffmpeg: str) -> None:
     assert "sample_rate=44100" in probe.stdout
     assert "channels=2" in probe.stdout
     assert output.read_bytes()[:16] == bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c")
+    data = output.read_bytes()
+    assert struct.unpack("<4sII20s", data[-32:]) == (b"S3V0", 32, len(data) - 32, bytes(20))
     assert result.output_measurement is not None
     assert result.output_measurement.integrated_lufs == pytest.approx(-11, abs=0.2)
 
