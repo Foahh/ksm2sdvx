@@ -73,7 +73,8 @@ def test_renderer_never_overwrites_a_source(tmp_path: Path) -> None:
         (
             '{"protocol_version":1,"sample_rate":44100,"channels":2,"frames":1,'
             '"effects":0,"keysounds":0,"bass_version":"2.4.18.3",'
-            '"bass_fx_version":"2.4.12.6"}',
+            '"bass_fx_version":"2.4.12.6","processing_profile":"ksm-compressed-v1",'
+            '"saturated_samples":0}',
             0,
             "invalid WAV",
         ),
