@@ -270,7 +270,7 @@ def convert_camera(
             if isinstance(value, AutoTilt):
                 if value in supported_modes:
                     modes.append((point.pulse, supported_modes[value]))
-                else:
+                elif value != AutoTilt.ZERO:
                     report.record(
                         "tilt_mode",
                         FeatureStatus.UNSUPPORTED,
@@ -282,16 +282,18 @@ def convert_camera(
     runs: list[list[Span]] = []
     manual: list[Span] | None = None
     for i, current in enumerate(tilt):
+        following = tilt[i + 1] if i + 1 < len(tilt) else None
+        stop = following.pulse if following else end
         if isinstance(current.outgoing, AutoTilt):
             manual = None
+            if current.outgoing == AutoTilt.ZERO and stop > current.pulse:
+                runs.append([Span(current.pulse, stop - current.pulse, 0, 0)])
             continue
         if manual is None:
             manual = []
             runs.append(manual)
         if not isinstance(current.incoming, AutoTilt) and current.incoming != current.outgoing:
             manual.append(Span(current.pulse, 0, current.incoming, current.outgoing))
-        following = tilt[i + 1] if i + 1 < len(tilt) else None
-        stop = following.pulse if following else end
         if stop == current.pulse:
             continue
         # A numeric value remains manual, including zero, until an automatic setting.
@@ -321,6 +323,14 @@ def convert_camera(
                 node = TiltNode.CONTINUE
             add(span, ControllerName.TILT, MANUAL_TILT_SCALE, node)
             report.count("manual_tilt_rows")
+    if any(point.outgoing == AutoTilt.ZERO for point in tilt):
+        report.record(
+            "tilt_mode",
+            FeatureStatus.APPROXIMATED,
+            "/camera/tilt",
+            code="ZERO_TILT_MAPPING",
+            message="Zero tilt uses a manual hold; transitions may differ.",
+        )
     if any(not isinstance(point.incoming, AutoTilt) for point in camera.tilt):
         report.record(
             "manual_tilt",

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from types import MappingProxyType
 
+from ksm2sdvx.chart.conversion.beat import convert_bpms
 from ksm2sdvx.chart.conversion.buttons import convert_buttons
 from ksm2sdvx.chart.conversion.camera import attach_spins, convert_camera
 from ksm2sdvx.chart.conversion.effects import report_unconverted
@@ -21,7 +22,7 @@ from ksm2sdvx.chart.vox.effects import (
     NoEffect,
     ParameterAssignment,
 )
-from ksm2sdvx.chart.vox.model import VoxBpmEvent, VoxChart, VoxMeterEvent, VoxTrack
+from ksm2sdvx.chart.vox.model import VoxChart, VoxMeterEvent, VoxTrack
 from ksm2sdvx.chart.vox.validation import validate_vox
 from ksm2sdvx.common.diagnostics import FeatureStatus
 
@@ -47,6 +48,7 @@ def convert_chart(
     profile.validate()
     report = ReportBuilder()
     timeline = Timeline(chart.beat.time_signatures)
+    bpms, beat_end = convert_bpms(chart.beat, timeline, report)
     buttons, button_end = convert_buttons(chart.note, timeline, report)
     samples = convert_lasers(chart.note, timeline, options.curve_step, report)
     samples, spin_end = attach_spins(samples, chart.camera.spins, report)
@@ -54,11 +56,11 @@ def convert_chart(
         chart.beat.scroll_speed, timeline, options.curve_step, report
     )
     end = max(
+        beat_end,
         button_end,
         spin_end,
         scroll_end,
         *(int(p) for p in timeline.starts),
-        *(e.pulse for e in chart.beat.bpm),
         *(s.pulse for s in samples),
     )
     controllers, tilt_modes, camera_end = convert_camera(
@@ -70,7 +72,6 @@ def convert_chart(
     tracks = tuple(
         sorted((*buttons, VoxTrack(1, left), VoxTrack(8, right)), key=lambda t: t.number)
     )
-    bpms = tuple(VoxBpmEvent(timeline.position(e.pulse), e.bpm) for e in chart.beat.bpm)
     meters = tuple(
         VoxMeterEvent(timeline.position(p), e.numerator, e.denominator)
         for p, e in zip(timeline.starts, chart.beat.time_signatures, strict=True)

@@ -68,12 +68,12 @@ def test_losses_and_strict_mode() -> None:
     chart = parse_kson(
         document(
             beat={"bpm": [[0, 120]], "stop": [[240, 240]], "scroll_speed": [[0, 2]]},
-            camera={"tilt": [[0, "zero"]]},
+            camera={"tilt": [[0, "biggest"]]},
         )
     ).chart
     result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
     codes = {d.code for d in result.report.diagnostics}
-    assert {"UNSUPPORTED_STOP", "UNSUPPORTED_TILT_MODE"} <= codes
+    assert "UNSUPPORTED_TILT_MODE" in codes
     assert "UNSUPPORTED_SCROLL_SPEED" not in codes
     assert any(f.status == FeatureStatus.UNSUPPORTED for f in result.report.features)
     with pytest.raises(UnsupportedFeaturesError) as caught:

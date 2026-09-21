@@ -16,11 +16,12 @@ have additional behavior described below.
 | Zoom top/bottom | Joint projection of relative lane width and height, with sampled physical spans |
 | Manual tilt | Fixed angular conversion, continuous winding and equivalent instantaneous orientations |
 | Normal, bigger, keep_bigger tilt | Converted to existing VOX mode codes |
-| Other auto tilt modes, including zero | Explicit unsupported-feature diagnostics |
+| Zero auto tilt | Manual zero hold; transition behavior is approximate |
+| Other auto tilt modes | Explicit unsupported-feature diagnostics |
 | Spins and half-spins | Positive durations attach to matching slams; zero-duration events emit no roll and are reported as no-ops |
 | Swing and other camera body controls | Preserved with unsupported-feature diagnostics |
 | Scroll speed, including negative values | Converted to signed ManualSpeed updates; linear and curved ramps are sampled |
-| Stops (`beat.stop`) | Preserved with unsupported-feature diagnostics |
+| Stops (`beat.stop`) | Native BPM pause flags; overlapping and touching intervals merged |
 | Effect definitions, automation, invocations | Preserved; standalone chart output diagnoses absent audio rendering |
 | Keysounds | Preserved; package creation renders supported chip samples |
 | Metadata, BGM and artwork references | Preserved for package processing; their absence from VOX text does not fail strict chart conversion |
@@ -44,7 +45,7 @@ Ordinary silent chips retain sample `0`.
 The target model supports explicit beat resolution, BPM pause flags and options,
 effect definitions and modulation, optional chain counts, post-effects, scripts,
 and locked controllers. That target-format support does not imply a KSON mapping
-for stops, FX or scripted visuals.
+for FX or scripted visuals.
 
 `beat.scroll_speed` uses instantaneous `ManualSpeed` multipliers, independent of
 BPM. Constant values and jumps are retained, including negative multipliers,
@@ -58,9 +59,15 @@ at an anchor its outgoing value applies, and the final value persists.
 Scroll events contribute to the chart end without changing BPM or note timing.
 Negative multipliers are emitted unchanged and accepted in strict conversion;
 reverse-scroll rendering and judgment behavior have not been verified in gameplay.
-The separate `beat.stop` field remains unsupported, even though zero values in
-`scroll_speed` are converted. See [vox2ksh](https://github.com/whiteou7/vox2ksh)
-for the upstream VOX reference.
+
+`beat.stop` uses native `4-` BPM pause markers and restores `4` at the end.
+Overlapping and touching stops form one continuous interval. BPM changes within
+a stop retain the pause flag; note timing and BPM values remain unchanged.
+Stop endpoints must fit the five-pulse grid and contribute to chart end.
+Zero-duration stops have no effect. Scroll-speed updates remain independent;
+combined stops and `ManualSpeed`, especially around ramps, need playback
+verification. See [vox2ksh](https://github.com/whiteou7/vox2ksh) for the upstream
+VOX reference.
 
 Spin conversion sets VOX's total duration to twice the KSON duration and reports
 `SPIN_DURATION_MAPPING` as an approximation. It never selects a triple roll for a
@@ -90,6 +97,9 @@ a turn, so a jump from 0 to 36 does not introduce a target revolution. Target
 smoothing, different rotation pivots and judgment overlays remain approximation
 limits, including combined zoom/tilt and continuous full turns. A numeric manual
 value, including zero, holds until the next automatic setting or the chart ends.
+The automatic mode `"zero"` also emits a manual zero hold, lasting until the next
+tilt setting or chart end. It does not create ramps to adjacent manual values.
+Its entry and exit transitions can differ from the source automatic tilt fade.
 
 Realize anchors are `(17.12, 60.12, 110.12)` for radius and `(0.28, 0.72, 1.57)`
 for pitch. Camera mapping is fixed; there are no camera gain or scale options.

@@ -26,6 +26,7 @@ from ksm2sdvx.chart.geometry.camera import (
 from ksm2sdvx.chart.kson.model import AutoTilt, CurveControl, GraphPoint, TiltEvent
 from ksm2sdvx.chart.types import KsonPulse, VoxTick
 from ksm2sdvx.chart.vox.model import ControllerName, ControllerSpan, Realize, TiltNode, VoxPosition
+from ksm2sdvx.common.diagnostics import FeatureStatus
 
 RADIUS = Normalization(*DEFAULT_PROFILE.radius_anchors)
 ROTATION = Normalization(*DEFAULT_PROFILE.rotation_anchors)
@@ -334,3 +335,72 @@ def test_manual_curve_keeps_full_turn_without_sampling_warning() -> None:
     assert len(rows) > 2 and rows[-1].end_value == pytest.approx(36 * MANUAL_TILT_SCALE)
     assert all(a.end_value == b.start_value for a, b in pairwise(rows))
     assert "SAMPLED_TILT_CURVE" not in {d.code for d in result.report.diagnostics}
+
+
+@pytest.mark.parametrize("mode, code", [("normal", 0), ("bigger", 1), ("keep_bigger", 2)])
+def test_zero_tilt_holds_during_lasers_then_restores_automatic_mode(mode: str, code: int) -> None:
+    chart = parse_kson(
+        document(
+            camera={"tilt": [[0, "zero"], [480, mode]]},
+            note={"laser": [[[0, [[0, 0], [480, 1], [960, 0]]]], []]},
+        )
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
+    (hold,) = spans(result, ControllerName.TILT)
+    assert hold.node_type == TiltNode.SINGLE
+    assert hold.duration == 96
+    assert hold.start_value == hold.end_value == 0
+    assert result.chart.tilt_modes[-1].position == VoxPosition(1, 3, VoxTick(0))
+    assert result.chart.tilt_modes[-1].mode == code
+    assert "ZERO_TILT_MAPPING" in {d.code for d in result.report.diagnostics}
+    assert not any(f.status == FeatureStatus.UNSUPPORTED for f in result.report.features)
+
+
+def test_zero_tilt_between_manual_values_does_not_create_ramps() -> None:
+    result = camera_result(
+        {"tilt": [[0, 2], [240, "zero"], [480, 1], [720, "normal"]]},
+        ConversionOptions(strict=True),
+    )
+    before, zero, after = spans(result, ControllerName.TILT)
+    assert all(
+        row.node_type == TiltNode.SINGLE and row.duration == 48 for row in (before, zero, after)
+    )
+    assert before.start_value == before.end_value == 2 * MANUAL_TILT_SCALE
+    assert zero.start_value == zero.end_value == 0
+    assert after.start_value == after.end_value == MANUAL_TILT_SCALE
+
+
+def test_numeric_incoming_value_is_preserved_when_switching_to_zero() -> None:
+    result = camera_result(
+        {"tilt": [[0, 1], [240, [2, "zero"]], [480, "normal"]]},
+        ConversionOptions(strict=True),
+    )
+    ramp, zero = spans(result, ControllerName.TILT)
+    assert ramp.start_value == MANUAL_TILT_SCALE
+    assert ramp.end_value == 2 * MANUAL_TILT_SCALE
+    assert ramp.node_type == zero.node_type == TiltNode.SINGLE
+    assert zero.position == VoxPosition(1, 2, VoxTick(0))
+    assert zero.duration == 48
+    assert zero.start_value == zero.end_value == 0
+
+
+def test_zero_tilt_final_hold_reaches_last_note() -> None:
+    chart = parse_kson(
+        document(camera={"tilt": [[240, "zero"]]}, note={"bt": [[960], [], [], []]})
+    ).chart
+    result = convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
+    (zero,) = spans(result, ControllerName.TILT)
+    assert zero.position == VoxPosition(1, 2, VoxTick(0))
+    assert zero.duration == 144
+    assert zero.start_value == zero.end_value == 0
+
+
+def test_zero_tilt_resets_manual_winding_without_interpolating_toward_next_value() -> None:
+    result = camera_result(
+        {"tilt": [[0, 0], [240, 36], [480, "zero"], [720, 37], [960, "normal"]]},
+        ConversionOptions(strict=True),
+    )
+    ramp, manual_hold, zero, resumed = spans(result, ControllerName.TILT)
+    assert ramp.end_value == manual_hold.start_value == 36 * MANUAL_TILT_SCALE
+    assert zero.start_value == zero.end_value == 0
+    assert resumed.start_value == resumed.end_value == pytest.approx(MANUAL_TILT_SCALE)

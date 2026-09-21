@@ -21,16 +21,6 @@ def report_unconverted(chart: KsonChart, report: ReportBuilder) -> None:
             code="PACKAGE_ASSETS",
             message="Asset references and BGM settings are preserved; asset processing is deferred.",
         )
-    for i, stop in enumerate(chart.beat.stops):
-        if stop.duration:
-            report.record(
-                "stop",
-                FeatureStatus.UNSUPPORTED,
-                f"/beat/stop/{i}",
-                code="UNSUPPORTED_STOP",
-                message="Scroll stops are not converted.",
-                pulse=stop.pulse,
-            )
     for name, group in (("fx", chart.audio.fx), ("laser", chart.audio.laser)):
         base = f"/audio/audio_effect/{name}"
         for i, _ in enumerate(group.definitions):
