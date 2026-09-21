@@ -305,7 +305,8 @@ def test_unimplemented_audio_remains_explicit() -> None:
     assert all(path not in program.coverage_paths for path in program.unsupported_paths)
 
 
-def test_render_coverage_disables_native_processing_and_preserves_chips() -> None:
+@pytest.mark.parametrize("sample", [0, 2])
+def test_render_coverage_disables_native_processing_and_preserves_chips(sample: int) -> None:
     chart = parse_kson(
         document(
             note={"fx": [[0, 120, [240, 240]], []], "laser": [[[0, [[0, 0], [480, 1]]]], []]},
@@ -319,11 +320,15 @@ def test_render_coverage_disables_native_processing_and_preserves_chips() -> Non
     with pytest.raises(UnsupportedFeaturesError):
         convert_chart(chart, options=ConversionOptions(strict=True), profile=DEFAULT_PROFILE)
     rendered = apply_rendered_audio(
-        result, chart, compile_chart_audio(chart), options=ConversionOptions(strict=True)
+        result,
+        chart,
+        compile_chart_audio(chart),
+        options=ConversionOptions(strict=True),
+        keysound_sample=sample,
     )
     assert [
         n.sample for t in rendered.chart.tracks for n in t.events if isinstance(n, VoxFxChip)
-    ] == [255, 0]
+    ] == [sample, 0]
     assert all(
         n.effect == 6
         for t in rendered.chart.tracks
@@ -336,7 +341,7 @@ def test_render_coverage_disables_native_processing_and_preserves_chips() -> Non
 
 
 def test_render_coverage_cannot_hide_non_audio_strict_omissions() -> None:
-    chart = parse_kson(document(beat={"bpm": [[0, 120]], "stop": [[240, 120]]})).chart
+    chart = parse_kson(document(camera={"cam": {"body": {"zoom_side": [[0, 1]]}}})).chart
     result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
     with pytest.raises(UnsupportedFeaturesError):
         apply_rendered_audio(

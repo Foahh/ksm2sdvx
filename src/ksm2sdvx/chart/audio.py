@@ -329,13 +329,17 @@ def apply_rendered_audio(
     program: ChartAudioProgram,
     *,
     options: ConversionOptions,
+    keysound_sample: int = 0,
 ) -> ConversionResult:
     """Apply a successfully rendered program to VOX and then enforce strict policy.
 
     The application calls this only after the renderer has completed successfully.
     Coverage is limited to exact source paths compiled into the audio program.
+    A nonzero keysound_sample requires a matching silent native sample bank.
     """
     options.validate()
+    if type(keysound_sample) is not int or not 0 <= keysound_sample <= 14:
+        raise ConversionError("Rendered keysound sample must be an integer from 0 to 14")
     unsupported = frozenset(program.unsupported_paths)
     coverage = frozenset(program.coverage_paths) - unsupported
     existing_paths = {f.json_pointer for f in result.report.features}
@@ -369,7 +373,9 @@ def apply_rendered_audio(
             events=tuple(
                 replace(event, effect=6)
                 if isinstance(event, VoxLaserPoint)
-                else replace(event, sample=255 if (track.number, event.position) in chips else 0)
+                else replace(
+                    event, sample=keysound_sample if (track.number, event.position) in chips else 0
+                )
                 if isinstance(event, VoxFxChip)
                 else replace(event, effect_pair=2)
                 if isinstance(event, VoxFxHold)
