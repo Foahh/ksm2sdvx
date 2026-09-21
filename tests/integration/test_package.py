@@ -374,6 +374,74 @@ def _stub_package_media(monkeypatch: pytest.MonkeyPatch) -> _PackageMusic:
     return music
 
 
+@pytest.mark.parametrize("with_jacket", [False, True])
+@pytest.mark.parametrize("strict", [False, True])
+def test_package_allows_charts_without_jackets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, with_jacket: bool, strict: bool
+) -> None:
+    manifest, game = _inputs(tmp_path)
+    source = manifest.parent
+    text = MANIFEST.split("[jacket]")[0]
+    if with_jacket:
+        (source / "advanced.kson").write_bytes((source / "chart.kson").read_bytes())
+        text += (
+            '[[charts]]\npath = "advanced.kson"\nslot = "advanced"\n'
+            '[charts.jacket]\nsource = "jacket.png"\n'
+        )
+    else:
+        (game / "graphics/s_jacket00.ifs").unlink()
+        (source / "jacket.png").unlink()
+    manifest.write_text(text, encoding="utf-8")
+    _stub_package_media(monkeypatch)
+    output = tmp_path / "mod"
+    build_package(
+        load_package_config(manifest),
+        game_data=game,
+        destination=output,
+        options=ConversionOptions(strict=strict),
+        profile=DEFAULT_PROFILE,
+        renderer=_PackageRenderer(),
+    )
+    folder = output / "music/3000_synthetic"
+    assert (folder / "3000_synthetic_3e.vox").is_file()
+    assert (folder / "3000_synthetic_3e.s3v").is_file()
+    assert (folder / "3000_synthetic_pre.s3v").is_file()
+    assert not list(output.rglob("jk_3000_3*.png"))
+    if with_jacket:
+        assert len(list(output.rglob("jk_3000_2*.png"))) == 4
+    else:
+        assert not list(output.rglob("*.png"))
+        assert not (output / "graphics").exists()
+    xml = ET.fromstring((output / "others/music_db.merged.xml").read_bytes().decode("cp932"))
+    assert xml.findtext("music/difficulty/exhaust/difnum") == "100"
+    report = cast(dict[str, object], json.loads((output / "ksm2sdvx-report.json").read_text()))
+    assert "music/3000_synthetic/3000_synthetic_3e.vox" in cast(list[str], report["files"])
+
+
+@pytest.mark.parametrize(
+    "missing,message",
+    [("jacket", "Missing asset: jacket.png"), ("archive", "selector jackets")],
+)
+def test_package_rejects_missing_inputs_for_supplied_jackets(
+    tmp_path: Path, missing: str, message: str
+) -> None:
+    manifest, game = _inputs(tmp_path)
+    if missing == "jacket":
+        (manifest.parent / "jacket.png").unlink()
+    else:
+        (game / "graphics/s_jacket00.ifs").unlink()
+    output = tmp_path / "mod"
+    with pytest.raises(PackageError, match=message):
+        build_package(
+            load_package_config(manifest),
+            game_data=game,
+            destination=output,
+            options=ConversionOptions(),
+            profile=DEFAULT_PROFILE,
+        )
+    assert not output.exists()
+
+
 def test_package_uses_tempo_range_without_display_bpm(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

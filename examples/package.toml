@@ -31,6 +31,7 @@ song_id = 3000 # Example only; choose an unused ID from 1 to 3071.
 
 [jacket]
 # Shared artwork and credit; defaults come from each KSON file.
+# Artwork is optional when neither TOML nor KSON specifies an image.
 # Images keep their proportions, with black margins when needed.
 # source = "jacket.png"
 # author = "Artwork author"

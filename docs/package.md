@@ -5,8 +5,9 @@
 charts, music, preview, jackets, and music database entry into a mod directory.
 The command does not install the result into a running game.
 
-Package creation requires Windows with the Windows Media Format runtime, plus
-FFmpeg and FFprobe on `PATH`. Use `--ffmpeg` and `--ffprobe` to select executables.
+Package creation requires Windows with the Windows Media Format runtime and
+FFmpeg on `PATH`. FFprobe is also required when converting jackets.
+Use `--ffmpeg` and `--ffprobe` to select executables.
 Python runtime dependencies remain standard-library only.
 
 ## Build a package
@@ -35,7 +36,7 @@ and [conversion limits](#conversion-limits-and-failures).
 | Argument or option | Default | Meaning |
 | --- | --- | --- |
 | `MANIFEST` | Required | Path to the TOML configuration |
-| `--game-data PATH` | Required | Reference data directory containing `others/music_db.xml` and `graphics/s_jacket00.ifs` |
+| `--game-data PATH` | Required | Reference data directory containing `others/music_db.xml`; `graphics/s_jacket00.ifs` is needed only when producing jackets |
 | `-o PATH`, `--output PATH` | `output/data_mods/<name>` | New mod directory; must not exist or be inside the reference data directory |
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Audio and image processing executable |
 | `--ffprobe EXECUTABLE` | `ffprobe` | Image probing executable |
@@ -148,6 +149,11 @@ The precedence is `[charts.jacket]` → `[jacket]` → the fallback above. Place
 `[charts.jacket]` table after the `[[charts]]` entry it belongs to. Artwork credit
 is set through `author` here or read from KSON.
 
+Jackets are optional. If neither TOML nor KSON supplies an image reference for a
+chart, its package contains no jacket images. This is also allowed in strict
+mode. Referenced files must still exist, and symbolic presets still require an
+explicit image override.
+
 ### `[[charts]]`
 
 | Field | Required/default | Meaning and constraints |
@@ -227,7 +233,8 @@ loudness and peak values. Database `volume` remains a separate playback control.
 Jackets are 8-bit RGB PNGs: 300×300 standard, 108×108 small, 676×676 large and
 128×128 selector. Images always use contain: the full image keeps its aspect
 ratio with black margins. Transparent pixels composite onto black. A non-square
-conversion is reported. All four sizes are produced for each selected chart.
+conversion is reported. All four sizes are produced for each selected chart
+that supplies a jacket.
 
 ```toml
 [[charts]]
@@ -244,7 +251,7 @@ building a package.
 
 ## Output and reports
 
-For song 3000 in the exhaust slot, the output contains:
+For song 3000 in the exhaust slot with a jacket, the output contains:
 
 ```text
 my_song/

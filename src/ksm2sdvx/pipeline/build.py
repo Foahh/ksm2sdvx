@@ -213,12 +213,21 @@ def _build_package(
         raise PackageError("Package output must be outside the reference game data directory")
     if destination.exists():
         raise PackageError("Package output already exists; choose a new destination")
-    if not (game_data / "graphics/s_jacket00.ifs").is_file():
+    database = load_music_database(game_data / "others/music_db.xml")
+    charts, assets, diagnostics = _load_charts(config, options, profile)
+    jackets = {
+        chart.binding.path: _owned_resource(assets, chart.binding.path, "jacket")
+        for chart in charts
+        if any(
+            use.source == chart.binding.path and use.role == "jacket"
+            for asset in assets
+            for use in asset.uses
+        )
+    }
+    if jackets and not (game_data / "graphics/s_jacket00.ifs").is_file():
         raise PackageError(
             "Reference data must contain graphics/s_jacket00.ifs for selector jackets"
         )
-    database = load_music_database(game_data / "others/music_db.xml")
-    charts, assets, diagnostics = _load_charts(config, options, profile)
     for chart in charts:
         for field in chart.source.meta.optional:
             if field.path in {
@@ -326,7 +335,6 @@ def _build_package(
             raise PackageError(
                 "Charts in one song must share music, audio offset, volume and preview timing"
             )
-        _owned_resource(assets, chart.binding.path, "jacket")
     if bgm.preview_duration <= 0:
         raise PackageError("Package preview duration must be positive")
     music_processor = FfmpegMusicProcessor(ffmpeg=ffmpeg)
@@ -417,7 +425,9 @@ def _build_package(
                     **audio_measurements(full),
                 }
             )
-            jacket = _owned_resource(assets, chart.binding.path, "jacket")
+            jacket = jackets.get(chart.binding.path)
+            if jacket is None:
+                continue
             for size, label in (
                 (JacketSize.SMALL, "small"),
                 (JacketSize.STANDARD, "standard"),
@@ -448,7 +458,7 @@ def _build_package(
                 "PACKAGE_MEDIA_CONVERTED",
                 Severity.INFO,
                 Stage.PACKAGE,
-                "Music, preview and jacket files were produced for all selected charts.",
+                "Music and preview files were produced, along with any supplied jackets.",
                 "package",
             )
         )
