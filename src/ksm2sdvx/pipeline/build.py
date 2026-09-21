@@ -37,6 +37,7 @@ from ksm2sdvx.metadata import (
 from ksm2sdvx.music import FfmpegMusicProcessor, MusicRequest, S3vMusicSettings
 from ksm2sdvx.music.render_models import AudioRenderer
 from ksm2sdvx.music.renderer import NativeAudioRenderer
+from ksm2sdvx.music.sampler import SILENT_KEYSOUND_SAMPLE, write_silent_keysound_bank
 from ksm2sdvx.pipeline.audio import (
     audio_measurements,
     render_chart_audio,
@@ -49,7 +50,12 @@ from ksm2sdvx.pipeline.models import PackageChart, PackageResource, PackageWrite
 from ksm2sdvx.pipeline.writer import LayeredFsPackageWriter
 from ksm2sdvx.resources import discover_resources
 from ksm2sdvx.resources.discovery import resolve_resource
-from ksm2sdvx.resources.models import ResourceInput, ResourceRecord, ResourceReference
+from ksm2sdvx.resources.models import (
+    ProcessedResource,
+    ResourceInput,
+    ResourceRecord,
+    ResourceReference,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -331,6 +337,7 @@ def _build_package(
     rendered_charts: list[_Chart] = []
     with tempfile.TemporaryDirectory(prefix="ksm2sdvx-media-") as temp:
         workspace = Path(temp)
+        silent_bank: ProcessedResource | None = None
         audio_settings = S3vMusicSettings(
             target_lufs=config.target_lufs,
             true_peak_dbtp=config.true_peak_dbtp,
@@ -360,8 +367,22 @@ def _build_package(
                 destination=workspace / f"rendered_{assignment.slot.suffix}.wav",
                 renderer=renderer,
             )
+            sampler_filename: str | None = None
+            if chart.program.keysounds:
+                if silent_bank is None:
+                    silent_bank = write_silent_keysound_bank(
+                        workspace / "silent_keysounds.s3p", encoder=music_processor.encoder
+                    )
+                sampler_filename = f"general_sampler_{assignment.slot.suffix}.s3p"
+                resources.append(
+                    PackageResource(silent_bank, metadata.directory / sampler_filename)
+                )
             conversion = apply_rendered_audio(
-                chart.conversion, chart.source, chart.program, options=options
+                chart.conversion,
+                chart.source,
+                chart.program,
+                options=options,
+                keysound_sample=SILENT_KEYSOUND_SAMPLE if sampler_filename is not None else 0,
             )
             rendered_charts.append(replace(chart, conversion=conversion))
             full = music_processor.process(
@@ -386,6 +407,11 @@ def _build_package(
                         rendered, chart.binding.path.relative_to(config.root).as_posix()
                     ),
                     "coverage": chart.program.coverage_paths,
+                    "native_keysounds": {
+                        "sample": SILENT_KEYSOUND_SAMPLE if sampler_filename is not None else 0,
+                        "bank": sampler_filename,
+                        "silent": True,
+                    },
                     "source_volume": bgm.volume,
                     "offset_ms": int(bgm.offset),
                     **audio_measurements(full),

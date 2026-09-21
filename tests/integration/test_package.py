@@ -11,6 +11,7 @@ from typing import cast
 from xml.etree import ElementTree as ET
 
 import pytest
+from tests.audio_support import SilentS3vEncoder
 from tests.conftest import document
 from tests.support import chart_metadata, database_text, settings
 
@@ -324,6 +325,7 @@ def test_writer_rejects_traversal_and_leaves_existing_output(
 
 class _PackageMusic(FfmpegMusicProcessor):
     def __init__(self) -> None:
+        super().__init__(encoder=SilentS3vEncoder())
         self.full: list[MusicRequest[S3vMusicSettings]] = []
         self.previews: list[MusicRequest[S3vMusicSettings]] = []
 
@@ -394,14 +396,28 @@ def test_package_uses_tempo_range_without_display_bpm(
     xml = ET.fromstring((output / "others/music_db.merged.xml").read_bytes().decode("cp932"))
     assert xml.findtext("music/info/bpm_min") == "13500"
     assert xml.findtext("music/info/bpm_max") == "17250"
+    assert not list(output.rglob("general_sampler_*.s3p"))
 
 
 @pytest.mark.parametrize("fail_after", [None, 1])
+@pytest.mark.parametrize("with_keysounds", [False, True])
 def test_package_renders_each_difficulty_and_publishes_only_complete_results(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_after: int | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fail_after: int | None,
+    with_keysounds: bool,
 ) -> None:
     manifest, game = _inputs(tmp_path)
     source = manifest.parent
+    if with_keysounds:
+        chart = source / "chart.kson"
+        data = cast(dict[str, object], json.loads(chart.read_text(encoding="utf-8")))
+        data["note"] = {"fx": [[0], []]}
+        cast(dict[str, object], data["audio"])["key_sound"] = {
+            "fx": {"chip_event": {"sample.wav": [[0], []]}}
+        }
+        chart.write_text(json.dumps(data), encoding="utf-8")
+        (source / "sample.wav").write_bytes(b"sample")
     (source / "advanced.kson").write_bytes((source / "chart.kson").read_bytes())
     manifest.write_text(
         MANIFEST.replace(
@@ -443,14 +459,22 @@ def test_package_renders_each_difficulty_and_publishes_only_complete_results(
     assert (folder / "3000_synthetic_3e.s3v").read_bytes() == b"chart audio 1"
     assert (folder / "3000_synthetic_2a.s3v").read_bytes() == b"chart audio 2"
     assert (folder / "3000_synthetic_pre.s3v").read_bytes() == b"original preview"
+    if with_keysounds:
+        assert (folder / "general_sampler_3e.s3p").read_bytes() == (
+            folder / "general_sampler_2a.s3p"
+        ).read_bytes()
+        assert isinstance(music.encoder, SilentS3vEncoder) and music.encoder.calls == 1
+    else:
+        assert not list(folder.glob("general_sampler_*.s3p"))
     report = cast(dict[str, object], json.loads((output / "ksm2sdvx-report.json").read_text()))
     audio = cast(dict[str, object], report["music"])
     rendered_charts = cast(list[dict[str, object]], audio["charts"])
     assert [item["gain_db"] for item in rendered_charts] == [1, 2]
 
 
+@pytest.mark.parametrize("fail_bank", [False, True])
 def test_package_strict_consumes_file_keysounds_only_after_rendering(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_bank: bool
 ) -> None:
     manifest, game = _inputs(tmp_path)
     chart = manifest.parent / "chart.kson"
@@ -466,9 +490,22 @@ def test_package_strict_consumes_file_keysounds_only_after_rendering(
         encoding="utf-8",
     )
     (manifest.parent / "sample.wav").write_bytes(b"sample")
-    _stub_package_media(monkeypatch)
+    music = _stub_package_media(monkeypatch)
+    music.encoder = SilentS3vEncoder(fail=fail_bank)
     renderer = _PackageRenderer()
     output = tmp_path / "mod"
+    if fail_bank:
+        with pytest.raises(MusicError, match="Sample encoding failed"):
+            build_package(
+                load_package_config(manifest),
+                game_data=game,
+                destination=output,
+                options=ConversionOptions(strict=True),
+                profile=DEFAULT_PROFILE,
+                renderer=renderer,
+            )
+        assert not output.exists()
+        return
     build_package(
         load_package_config(manifest),
         game_data=game,
@@ -479,7 +516,18 @@ def test_package_strict_consumes_file_keysounds_only_after_rendering(
     )
     assert [sample.id for sample in renderer.requests[0].samples] == ["sample.wav"]
     vox = (output / "music/3000_synthetic/3000_synthetic_3e.vox").read_text(encoding="utf-8")
-    assert "001,01,00\t0\t255" in vox
+    assert "001,01,00\t0\t2" in vox
+    bank_name = "music/3000_synthetic/general_sampler_3e.s3p"
+    assert (output / bank_name).read_bytes().startswith(b"S3P0")
+    report = cast(dict[str, object], json.loads((output / "ksm2sdvx-report.json").read_text()))
+    assert bank_name in cast(list[str], report["files"])
+    audio = cast(dict[str, object], report["music"])
+    rendered_charts = cast(list[dict[str, object]], audio["charts"])
+    assert rendered_charts[0]["native_keysounds"] == {
+        "sample": 2,
+        "bank": "general_sampler_3e.s3p",
+        "silent": True,
+    }
 
 
 def test_package_rendering_does_not_bypass_unrelated_strict_omissions(
@@ -489,7 +537,7 @@ def test_package_rendering_does_not_bypass_unrelated_strict_omissions(
     chart = manifest.parent / "chart.kson"
     chart.write_text(
         document(
-            beat={"bpm": [[0, 120]], "stop": [[240, 120]]},
+            camera={"cam": {"body": {"zoom_side": [[0, 1]]}}},
             audio={"bgm": {"filename": "music.wav", "preview": {"offset": 0, "duration": 1000}}},
         ),
         encoding="utf-8",
