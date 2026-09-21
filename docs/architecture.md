@@ -210,8 +210,11 @@ maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
 `AudioRenderer` returns a completed PCM resource and a render receipt.
 `NativeAudioRenderer` prepares stereo 44.1 kHz floating-point inputs, invokes the
 bundled helper, and validates its response before publishing the PCM file.
-The helper uses ksmaudio from the pinned KSM submodule and processes effects on
-an offline sample clock. Presets and BASS libraries ship beside the executable.
+The helper uses ksmaudio's music stream and compressor chain from the pinned KSM
+submodule, with effects scheduled on an offline sample clock. Chip samples are
+mixed afterward; the final mix saturates at the signed PCM range before loudness
+measurement. Render receipts record the processing profile and saturated sample
+count. Presets and BASS libraries ship beside the executable.
 
 The package pipeline renders and normalizes each difficulty separately, then
 disables native chart effects only after the render succeeds. Exact source

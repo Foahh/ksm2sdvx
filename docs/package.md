@@ -183,9 +183,11 @@ loudness and constrained by preview peak headroom.
 The default loudness target is **−11 LUFS**, configurable through
 `music.target_lufs`. FFmpeg measures integrated loudness and true peak; a constant
 `volume` filter applies the smaller of the required loudness gain and available
-peak headroom. It does not compress the signal's dynamics. KSON BGM volume sets
-its level relative to chip samples before normalization. A silent rendered mix
-cannot be normalized and fails with an audio error.
+peak headroom. Normalization does not change dynamics. Chart rendering first
+uses KSM's music compressor, mixes chip samples, and saturates the mix at the
+signed PCM output range. KSON BGM volume sets its level relative to chip samples
+before normalization. The original-audio preview bypasses chart processing.
+A silent rendered mix cannot be normalized and fails with an audio error.
 
 Effects are baked into gameplay music and do not depend on player input. The
 matching VOX chart disables native FX and laser filtering to avoid applying the

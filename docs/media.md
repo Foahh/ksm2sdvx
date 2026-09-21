@@ -61,10 +61,12 @@ or setup command is needed. Other sample and switch-audio files resolve relative
 to the chart and must remain inside its directory. Package conversion instead
 uses the TOML directory as its containment boundary.
 
-The renderer applies authored effects and mixes keysounds before normalization.
-BGM volume controls its level relative to keysounds; the final mix receives one
-constant gain. Effects follow the authored chart regardless of player input.
-KSM's playback master compressor is not applied.
+The renderer uses KSM's music effect and compressor chain, then mixes chip
+keysounds. BGM volume controls its level relative to keysounds. The completed mix
+saturates at the signed PCM output range before receiving one constant
+normalization gain. Reports identify the processing profile and count saturated
+samples. Effects follow the authored chart regardless of player input.
+Raw-audio conversion and original-audio previews do not use this compressor chain.
 Arcade slam feedback is retained rather than baked into the audio. Custom slam
 sounds, legacy alternate-BGM routing and unknown audio features are diagnosed;
 `--strict` rejects their omission. Missing resources and invalid parameters fail
