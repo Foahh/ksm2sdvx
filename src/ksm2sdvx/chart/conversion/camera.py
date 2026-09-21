@@ -230,8 +230,6 @@ def convert_camera(
                     name,
                     FeatureStatus.APPROXIMATED,
                     path,
-                    code="SAMPLED_CAMERA_CURVE",
-                    message=f"Zoom curves use spans of at most {options.curve_step} pulses.",
                 )
 
     for span in zoom_spans(
@@ -357,8 +355,6 @@ def convert_camera(
                 "manual_tilt_curve",
                 FeatureStatus.APPROXIMATED,
                 "/camera/tilt",
-                code="SAMPLED_TILT_CURVE",
-                message=f"Manual tilt curves sampled every {options.curve_step} pulses.",
             )
     modes.sort(key=lambda row: row[0])
     if not modes or modes[0][0] != 0:

@@ -251,9 +251,9 @@ def test_separate_manual_sequences_restart_node_encoding() -> None:
     assert [span.node_type for span in spans(result, ControllerName.TILT)] == [1, 1]
 
 
-def test_manual_curve_reports_sampling_and_keeps_full_turn() -> None:
+def test_manual_curve_keeps_full_turn_without_sampling_warning() -> None:
     result = camera_result({"tilt": [[0, [0, [0.2, 0.8]]], [3840, 36]]})
     rows = spans(result, ControllerName.TILT)
     assert len(rows) > 2 and rows[-1].end_value == pytest.approx(36 * MANUAL_TILT_SCALE)
     assert all(a.end_value == b.start_value for a, b in pairwise(rows))
-    assert "SAMPLED_TILT_CURVE" in {d.code for d in result.report.diagnostics}
+    assert "SAMPLED_TILT_CURVE" not in {d.code for d in result.report.diagnostics}

@@ -56,9 +56,6 @@ def convert_lasers(
                             "laser_curve",
                             FeatureStatus.APPROXIMATED,
                             f"/note/laser/{lane_index}/{section_index}/1/{i}",
-                            code="SAMPLED_CURVE",
-                            message=f"Curved laser spans sampled every {step} pulses.",
-                            pulse=KsonPulse(pulse),
                         )
             if len(emitted) == 1:
                 emitted.append(emitted[0])
