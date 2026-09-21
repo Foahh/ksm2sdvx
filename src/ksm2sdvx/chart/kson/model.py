@@ -185,6 +185,36 @@ class EffectGroup:
     changes: tuple[EffectParameterChange, ...] = ()
     invocations: tuple[EffectInvocation, ...] = ()
     retained: tuple[Extension, ...] = ()
+    peaking_filter_delay: Milliseconds = Milliseconds(0)
+    filter_gain: tuple[NumericAudioEvent, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NumericAudioEvent:
+    pulse: KsonPulse
+    value: float
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChipKeySound:
+    pulse: KsonPulse
+    lane: int
+    sample: str
+    volume: float
+    preset: bool
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class KeySoundInfo:
+    chips: tuple[ChipKeySound, ...] = ()
+    laser: tuple[Extension, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CompatibilityInfo:
+    ksh_version: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,7 +222,7 @@ class AudioInfo:
     bgm: BgmInfo | None = None
     fx: EffectGroup = EffectGroup()
     laser: EffectGroup = EffectGroup()
-    key_sound: tuple[Extension, ...] = ()
+    key_sound: KeySoundInfo = KeySoundInfo()
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +236,7 @@ class KsonChart:
     retained: tuple[Extension, ...] = ()
     extensions: tuple[Extension, ...] = ()
     format_version: int = 1
+    compatibility: CompatibilityInfo = CompatibilityInfo()
 
 
 @dataclass(frozen=True, slots=True)

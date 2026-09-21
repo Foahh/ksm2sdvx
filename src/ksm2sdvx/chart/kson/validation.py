@@ -61,6 +61,7 @@ def validate_point(point: GraphPoint | RelativeGraphPoint, path: str) -> None:
 def validate_kson(chart: KsonChart) -> None:
     if type(chart.format_version) is not int or chart.format_version != 1:
         raise UnsupportedFormatError(f"Unsupported KSON format_version: {chart.format_version}")
+    check(type(chart.compatibility.ksh_version) is str, "expected string", "/compat/ksh_version")
     meta = chart.meta
     for name, value in (
         ("title", meta.title),
@@ -165,6 +166,17 @@ def validate_kson(chart: KsonChart) -> None:
         uint(bgm.preview_offset, "/audio/bgm/preview/offset")
         uint(bgm.preview_duration, "/audio/bgm/preview/duration")
     for name, group in (("fx", chart.audio.fx), ("laser", chart.audio.laser)):
+        base = f"/audio/audio_effect/{name}"
+        uint(group.peaking_filter_delay, base + "/peaking_filter_delay")
+        check(
+            group.peaking_filter_delay <= 160,
+            "peaking filter delay must be 0..160 ms",
+            base + "/peaking_filter_delay",
+        )
+        ordered((event.pulse for event in group.filter_gain), base + "/legacy/filter_gain")
+        for event in group.filter_gain:
+            finite(event.value, event.path)
+            check(event.value >= 0, "value must be nonnegative", event.path)
         names = [definition.name for definition in group.definitions]
         check(
             len(set(names)) == len(names),
@@ -173,11 +185,36 @@ def validate_kson(chart: KsonChart) -> None:
         )
         timelines: dict[tuple[str, str], list[int]] = {}
         for change in group.changes:
+            check(
+                change.parameter != "filename",
+                "filename parameters can only be set in effect definitions",
+                change.path,
+            )
             timelines.setdefault((change.effect, change.parameter), []).append(change.pulse)
         for values in timelines.values():
             ordered(values, f"/audio/audio_effect/{name}/param_change")
         invokes: dict[tuple[str, int | None], list[int]] = {}
         for invocation in group.invocations:
+            check(
+                all(name != "filename" for name, _ in invocation.parameters),
+                "filename parameters can only be set in effect definitions",
+                invocation.path,
+            )
+            check(
+                invocation.lane in (0, 1) if name == "fx" else invocation.lane is None,
+                "effect invocation has an invalid lane",
+                invocation.path,
+            )
             invokes.setdefault((invocation.effect, invocation.lane), []).append(invocation.pulse)
         for values in invokes.values():
             ordered(values, f"/audio/audio_effect/{name}/events")
+    chip_timelines: dict[tuple[str, int], list[int]] = {}
+    for chip in chart.audio.key_sound.chips:
+        check(type(chip.lane) is int and chip.lane in (0, 1), "expected FX lane 0 or 1", chip.path)
+        check(type(chip.sample) is str and bool(chip.sample), "expected sample name", chip.path)
+        finite(chip.volume, chip.path)
+        check(chip.volume >= 0, "volume must be nonnegative", chip.path)
+        check(type(chip.preset) is bool, "expected preset flag", chip.path)
+        chip_timelines.setdefault((chip.sample, chip.lane), []).append(chip.pulse)
+    for values in chip_timelines.values():
+        ordered(values, "/audio/key_sound/fx/chip_event")

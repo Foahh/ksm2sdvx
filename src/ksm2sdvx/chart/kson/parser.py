@@ -17,6 +17,8 @@ from ksm2sdvx.chart.kson.model import (
     BpmEvent,
     ButtonNote,
     CameraInfo,
+    ChipKeySound,
+    CompatibilityInfo,
     CurveControl,
     EffectDefinition,
     EffectGroup,
@@ -24,11 +26,13 @@ from ksm2sdvx.chart.kson.model import (
     EffectParameterChange,
     Extension,
     GraphPoint,
+    KeySoundInfo,
     KsonChart,
     LaserSection,
     Metadata,
     MeterEvent,
     NoteInfo,
+    NumericAudioEvent,
     ParsedKson,
     RelativeGraphPoint,
     SpinEvent,
@@ -460,12 +464,12 @@ class Parser:
                     for key, filename in params:
                         if key == "filename":
                             self.asset(filename, r + "/1/filename", "effect_audio")
-        retained = tuple(
-            Extension(pointer(path, k), data[k])
-            for k in ("peaking_filter_delay", "legacy")
-            if k in data
-        )
+        delay = Milliseconds(0)
+        filter_gain: tuple[NumericAudioEvent, ...] = ()
         if "peaking_filter_delay" in data:
+            delay = Milliseconds(
+                integer(data["peaking_filter_delay"], path + "/peaking_filter_delay")
+            )
             check(
                 integer(data["peaking_filter_delay"], path + "/peaking_filter_delay") <= 160,
                 "peaking filter delay must be 0..160 ms",
@@ -474,23 +478,31 @@ class Parser:
         if "legacy" in data:
             legacy = self.object(data["legacy"], path + "/legacy", ("filter_gain",))
             if "filter_gain" in legacy:
-                self.numeric_events(legacy["filter_gain"], path + "/legacy/filter_gain")
-        return EffectGroup(tuple(definitions), tuple(changes), tuple(invocations), retained)
+                filter_gain = self.numeric_events(
+                    legacy["filter_gain"], path + "/legacy/filter_gain"
+                )
+        return EffectGroup(
+            tuple(definitions), tuple(changes), tuple(invocations), (), delay, filter_gain
+        )
 
     def parameters(self, value: JsonValue, path: str) -> tuple[tuple[str, str], ...]:
         return tuple((k, string(v, pointer(path, k))) for k, v in obj(value, path).items())
 
-    def numeric_events(self, value: JsonValue, path: str) -> None:
+    def numeric_events(self, value: JsonValue, path: str) -> tuple[NumericAudioEvent, ...]:
         pulses: list[int] = []
+        events: list[NumericAudioEvent] = []
         for i, raw in enumerate(arr(value, path)):
             p = pointer(path, i)
             row = arr(raw, p, (2,))
             pulses.append(integer(row[0], p + "/0"))
             check(number(row[1], p + "/1") >= 0, "value must be nonnegative", p + "/1")
+            events.append(NumericAudioEvent(KsonPulse(pulses[-1]), number(row[1], p + "/1"), p))
         ordered(pulses, path)
+        return tuple(events)
 
-    def key_sounds(self, value: JsonValue) -> tuple[Extension, ...]:
+    def key_sounds(self, value: JsonValue) -> KeySoundInfo:
         keys = self.object(value, "/audio/key_sound", ("fx", "laser"))
+        chips: list[ChipKeySound] = []
         for lane_kind in ("fx", "laser"):
             p = f"/audio/key_sound/{lane_kind}"
             event_key = "chip_event" if lane_kind == "fx" else "slam_event"
@@ -524,6 +536,7 @@ class Parser:
                     pulses: list[int] = []
                     for i, raw in enumerate(arr(values, r)):
                         s = pointer(r, i)
+                        volume = 1.0
                         if lane_kind == "fx" and isinstance(raw, tuple):
                             row = arr(raw, s, (2,))
                             pulses.append(integer(row[0], s + "/0"))
@@ -533,10 +546,20 @@ class Parser:
                                 "volume must be nonnegative",
                                 s + "/1/vol",
                             )
+                            volume = number(params.get("vol", 1.0), s + "/1/vol")
                         else:
                             pulses.append(integer(raw, s))
+                        if lane_kind == "fx":
+                            chips.append(
+                                ChipKeySound(
+                                    KsonPulse(pulses[-1]), lane, name, volume, name in builtins, s
+                                )
+                            )
                     ordered(pulses, r)
-        return tuple(Extension(pointer("/audio/key_sound", k), v) for k, v in keys.items())
+        laser = keys.get("laser", {})
+        return KeySoundInfo(
+            tuple(chips), (Extension("/audio/key_sound/laser", laser),) if laser else ()
+        )
 
     def audio(self, value: JsonValue) -> AudioInfo:
         data = self.object(value, "/audio", ("bgm", "audio_effect", "key_sound"))
@@ -615,6 +638,10 @@ class Parser:
         notes = self.notes(data.get("note", {}))
         camera = self.camera(data.get("camera", {}))
         audio = self.audio(data.get("audio", {}))
+        compat = obj(data.get("compat", {}), "/compat")
+        compatibility = CompatibilityInfo(
+            string(compat.get("ksh_version", ""), "/compat/ksh_version")
+        )
         retained: list[Extension] = []
         for key in ("bg", "gauge", "editor", "compat", "impl"):
             if key in data:
@@ -639,6 +666,7 @@ class Parser:
             tuple(self.assets),
             tuple(retained),
             tuple(self.extensions),
+            compatibility=compatibility,
         )
 
 

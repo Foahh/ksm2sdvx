@@ -58,13 +58,47 @@ def report_unconverted(chart: KsonChart, report: ReportBuilder) -> None:
                 code="UNSUPPORTED_EFFECT_PARAMETER",
                 message="Effect parameter preserved but not translated.",
             )
-    for field in chart.audio.key_sound:
+        if group.peaking_filter_delay:
+            report.record(
+                "audio_effect",
+                FeatureStatus.UNSUPPORTED,
+                base + "/peaking_filter_delay",
+                code="UNSUPPORTED_EFFECT_PARAMETER",
+                message="Laser filter delay requires audio rendering.",
+            )
+        for event in group.filter_gain:
+            report.record(
+                "audio_effect",
+                FeatureStatus.UNSUPPORTED,
+                event.path,
+                code="UNSUPPORTED_EFFECT_PARAMETER",
+                message="Laser filter gain requires audio rendering.",
+                pulse=event.pulse,
+            )
+    for chip in chart.audio.key_sound.chips:
+        report.record(
+            "keysound",
+            FeatureStatus.UNSUPPORTED,
+            chip.path,
+            code="UNSUPPORTED_KEYSOUND",
+            message="Chip keysound requires audio rendering.",
+            pulse=chip.pulse,
+        )
+    for field in chart.audio.key_sound.laser:
         report.record(
             "keysound",
             FeatureStatus.UNSUPPORTED,
             field.path,
             code="UNSUPPORTED_KEYSOUND",
             message="Keysound configuration preserved but not converted.",
+        )
+    if chart.audio.bgm and chart.audio.bgm.legacy_filenames:
+        report.record(
+            "audio_effect",
+            FeatureStatus.UNSUPPORTED,
+            "/audio/bgm/legacy/fp_filenames",
+            code="UNSUPPORTED_LEGACY_AUDIO",
+            message="Legacy alternate BGM routing is not rendered.",
         )
     for field in chart.retained:
         if field.path in ("/editor", "/compat"):
