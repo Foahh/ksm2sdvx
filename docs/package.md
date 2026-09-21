@@ -23,15 +23,14 @@ uv run ksm2sdvx package package.toml --game-data reference/data
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Audio and image processing executable |
 | `--ffprobe EXECUTABLE` | `ffprobe` | Image probing executable |
 | `--strict` | Off | Reject omitted source features, including unmapped package metadata/resources |
-| `--curve-step PULSES` | `15` | Curve sampling interval; positive integer divisible by 5 |
-| `--zoom-top-scale NUMBER` | `0.0013225` | Finite scale for top camera values |
-| `--zoom-bottom-scale NUMBER` | `-0.00382` | Finite scale for bottom camera values |
-| `--tilt-scale NUMBER` | `-0.4217946006575624` | Finite scale for manual tilt values |
+| `--curve-step PULSES` | `15` | Laser/tilt curve interval and maximum moving zoom span; positive integer divisible by 5 |
 | `-h`, `--help` | — | Show command help |
 
 Command-line paths resolve from the working directory. `-o` names the mod
 directory itself, for example `exports/data_mods/my_song`. The reference database
 and archive are read-only inputs. These command options are not TOML fields.
+Camera mapping and its projection limits are described in
+[conversion compatibility](compatibility.md#chart-conversion).
 
 ## Complete configuration reference
 

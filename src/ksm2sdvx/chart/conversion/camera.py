@@ -2,15 +2,18 @@
 
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from math import fmod, isfinite
 
 from ksm2sdvx.chart.conversion.lasers import LaserSample
 from ksm2sdvx.chart.conversion.options import ConversionOptions
 from ksm2sdvx.chart.conversion.profiles import VoxProfile
 from ksm2sdvx.chart.conversion.report import ReportBuilder
 from ksm2sdvx.chart.conversion.timing import Timeline, ticks
+from ksm2sdvx.chart.conversion.zoom import zoom_spans
 from ksm2sdvx.chart.errors import ConversionError
+from ksm2sdvx.chart.geometry.camera import MANUAL_TILT_SCALE, Normalization
 from ksm2sdvx.chart.geometry.curves import anchors
-from ksm2sdvx.chart.kson.model import AutoTilt, CameraInfo, GraphPoint, SpinEvent, SpinKind
+from ksm2sdvx.chart.kson.model import AutoTilt, CameraInfo, SpinEvent, SpinKind, TiltEvent
 from ksm2sdvx.chart.vox.model import (
     AirScale,
     Controller,
@@ -132,19 +135,36 @@ class Span:
     ending_auto: bool = False
 
 
-def graph_spans(points: tuple[GraphPoint, ...], step: int) -> tuple[Span, ...]:
-    rows = [Span(p.pulse, 0, p.incoming, p.outgoing) for p in points if p.incoming != p.outgoing]
-    for current, following in pairwise(points):
-        samples = anchors(
-            current.pulse,
-            following.pulse,
-            current.outgoing,
-            following.incoming,
-            current.control,
-            step,
-        )
-        rows.extend(Span(y0, y1 - y0, v0, v1) for (y0, v0), (y1, v1) in pairwise(samples))
-    return tuple(sorted(rows, key=lambda row: (row.pulse, 0 if row.duration == 0 else 1)))
+def rebase_tilt(points: tuple[TiltEvent, ...]) -> tuple[TiltEvent, ...]:
+    """Remove full turns only at discontinuities; keep continuous winding."""
+
+    def principal(value: float) -> float:
+        reduced = fmod(value, 36)
+        return reduced - 36 if reduced > 18 else reduced + 36 if reduced < -18 else reduced
+
+    offset = 0.0
+    active = False
+    result: list[TiltEvent] = []
+    for point in points:
+        incoming, outgoing = point.incoming, point.outgoing
+        if isinstance(incoming, AutoTilt):
+            offset = 0.0
+        else:
+            if not active:
+                offset = principal(incoming) - incoming
+            incoming += offset
+        if not isinstance(outgoing, AutoTilt):
+            if isinstance(point.incoming, AutoTilt):
+                offset = principal(outgoing) - outgoing
+            else:
+                delta = outgoing - point.incoming
+                if not isfinite(delta):
+                    raise ConversionError(f"Tilt jump at pulse {point.pulse} exceeds numeric range")
+                offset += principal(delta) - delta
+            outgoing += offset
+        result.append(replace(point, incoming=incoming, outgoing=outgoing))
+        active = not isinstance(outgoing, AutoTilt)
+    return tuple(result)
 
 
 def convert_camera(
@@ -178,35 +198,21 @@ def convert_camera(
         controllers.append((span.pulse, len(controllers), row))
         end = max(end, span.pulse + span.duration)
 
-    for name, points, controller, scale in (
-        ("zoom_bottom", camera.zoom_bottom, ControllerName.RADIUS, options.zoom_bottom_scale),
-        ("zoom_top", camera.zoom_top, ControllerName.ROTATION_X, options.zoom_top_scale),
-    ):
+    radius = Normalization(*profile.radius_anchors)
+    rotation = Normalization(*profile.rotation_anchors)
+    for name, points in (("zoom_bottom", camera.zoom_bottom), ("zoom_top", camera.zoom_top)):
         path = f"/camera/cam/body/{name}"
         for point in points:
             timeline.position(point.pulse)
             end = max(end, point.pulse)
-        rows = graph_spans(points, options.curve_step)
-        for row in rows:
-            add(row, controller, scale)
-        report.count("camera_rows", len(rows))
         report.count(f"{name}_points", len(points))
-        if len(points) == 1 and not rows and points[0].incoming != 0:
-            report.record(
-                name,
-                FeatureStatus.UNSUPPORTED,
-                path + "/0",
-                code="ISOLATED_CAMERA_VALUE",
-                message="Isolated nonzero camera values are not converted.",
-                pulse=points[0].pulse,
-            )
         if points:
             report.record(
                 name,
                 FeatureStatus.APPROXIMATED,
                 path,
-                code="CAMERA_SCALE_MAPPING",
-                message="Camera values use the configured scale and are emitted as linear VOX spans.",
+                code="CAMERA_GEOMETRY_MAPPING",
+                message="Zoom approximates lane width and height.",
             )
             if any(p.control.curved for p in points[:-1]):
                 report.record(
@@ -214,12 +220,41 @@ def convert_camera(
                     FeatureStatus.APPROXIMATED,
                     path,
                     code="SAMPLED_CAMERA_CURVE",
-                    message=f"Curved camera spans sampled every {options.curve_step} pulses.",
+                    message=f"Zoom curves use spans of at most {options.curve_step} pulses.",
                 )
+
+    for span in zoom_spans(
+        camera.zoom_bottom, camera.zoom_top, radius, rotation, options.curve_step
+    ):
+        for name, normalization, first, last in (
+            (ControllerName.RADIUS, radius, span.start.radius, span.end.radius),
+            (ControllerName.ROTATION_X, rotation, span.start.pitch, span.end.pitch),
+        ):
+            add(
+                Span(
+                    span.pulse,
+                    span.duration,
+                    normalization.encode(first),
+                    normalization.encode(last),
+                ),
+                name,
+                1,
+            )
+            report.count("camera_rows")
+
+    tilt = rebase_tilt(camera.tilt)
+    if tilt != camera.tilt:
+        report.record(
+            "manual_tilt",
+            FeatureStatus.CONVERTED,
+            "/camera/tilt",
+            code="TILT_JUMP_REBASED",
+            message="Removed extra turns from tilt jumps.",
+        )
 
     supported_modes = {AutoTilt.NORMAL: 0, AutoTilt.BIGGER: 1, AutoTilt.KEEP_BIGGER: 2}
     modes: list[tuple[int, int]] = []
-    for i, point in enumerate(camera.tilt):
+    for i, point in enumerate(tilt):
         timeline.position(point.pulse)
         end = max(end, point.pulse)
         for value in dict.fromkeys((point.incoming, point.outgoing)):
@@ -243,13 +278,13 @@ def convert_camera(
             add(
                 Span(point.pulse, 0, point.incoming, point.outgoing),
                 ControllerName.TILT,
-                options.tilt_scale,
+                MANUAL_TILT_SCALE,
             )
             report.count("manual_tilt_rows")
     runs: list[list[Span]] = []
     manual: list[Span] | None = None
     covered: set[int] = set()
-    for i, (current, following) in enumerate(pairwise(camera.tilt)):
+    for i, (current, following) in enumerate(pairwise(tilt)):
         if isinstance(current.outgoing, AutoTilt) or isinstance(following.incoming, AutoTilt):
             manual = None
             continue
@@ -281,9 +316,9 @@ def convert_camera(
                 node = 1 if span.ending_auto else 2
             else:
                 node = 2 if i == 0 else 3 if span.ending_auto or i == len(run) - 1 else 0
-            add(span, ControllerName.TILT, options.tilt_scale, node)
+            add(span, ControllerName.TILT, MANUAL_TILT_SCALE, node)
             report.count("manual_tilt_rows")
-    for i, point in enumerate(camera.tilt):
+    for i, point in enumerate(tilt):
         if (
             i not in covered
             and not isinstance(point.incoming, AutoTilt)
@@ -304,7 +339,7 @@ def convert_camera(
             FeatureStatus.APPROXIMATED,
             "/camera/tilt",
             code="TILT_SCALE_MAPPING",
-            message="Manual tilt values use the configured tilt scale.",
+            message="Manual tilt uses -8/19; target motion may differ.",
         )
         if any(point.control.curved for point in camera.tilt[:-1]):
             report.record(

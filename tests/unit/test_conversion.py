@@ -16,7 +16,7 @@ from ksm2sdvx.chart.conversion.timing import Timeline
 from ksm2sdvx.chart.errors import ConversionError
 from ksm2sdvx.chart.kson.model import MeterEvent
 from ksm2sdvx.chart.types import MeasureIndex, VoxTick
-from ksm2sdvx.chart.vox.model import ControllerSpan, Realize, VoxPosition
+from ksm2sdvx.chart.vox.model import ControllerName, ControllerSpan, Realize, VoxPosition
 from ksm2sdvx.common.diagnostics import FeatureStatus
 
 
@@ -114,7 +114,9 @@ def test_converter_initializes_before_values_and_serializer_preserves_order() ->
     ).chart
     result = convert_chart(chart, options=ConversionOptions(), profile=DEFAULT_PROFILE)
     controls = result.chart.controllers
-    jump = next(c for c in controls if isinstance(c, ControllerSpan))
+    jump = next(
+        c for c in controls if isinstance(c, ControllerSpan) and c.name == ControllerName.ROTATION_X
+    )
     assert isinstance(controls[0], Realize)
     text = serialize_vox(replace(result.chart, controllers=(jump, *controls)))
     # File order is preserved; Realize-first is a converter choice, not a format rule.

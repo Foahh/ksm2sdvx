@@ -13,7 +13,8 @@ have additional behavior described below.
 | Straight lasers and slams | Converted with stable same-pulse ordering |
 | Wide lasers | Width retained in normal and original laser tracks |
 | Curved lasers | Sampled every 15 KSON pulses; original tracks retain control nodes |
-| Zoom top/bottom and manual tilt | Configurable scales and linear spans |
+| Zoom top/bottom | Joint projection of relative lane width and height, with sampled physical spans |
+| Manual tilt | Fixed angular conversion, continuous winding and equivalent instantaneous orientations |
 | Normal, bigger, keep_bigger tilt | Converted to existing VOX mode codes |
 | Other auto tilt modes, including zero | Explicit unsupported-feature diagnostics |
 | Spins and half-spins | Attached to matching slams; duration mapping, fallback and ambiguity are reported |
@@ -27,8 +28,9 @@ have additional behavior described below.
 
 One target tick is five source pulses. Conversion rejects unrepresentable timing
 instead of rounding it. Sampling intervals must be positive multiples of five.
-Sampling is deterministic but is not an error-bounded approximation. Source
-anchors and jumps are preserved; analytical curve controls are not written to VOX.
+Laser and tilt curve sampling is deterministic but is not an error-bounded
+approximation. Zoom sampling also checks intermediate projected landmarks.
+Source anchors and jumps are preserved; analytical curve controls are not written to VOX.
 
 The converter writes five laser effect definitions, twelve no-effect FX pairs,
 and twenty-four disabled parameter assignments. FX holds reference pair `2`
@@ -46,11 +48,34 @@ long single spin. Fractional-beat encodings use tenths of a quarter note; source
 durations must be multiples of 60 pulses for this mapping, otherwise conversion
 fails without rounding. End position includes the full emitted VOX duration.
 
-Camera defaults are top `0.0013225`, bottom `-0.00382` and tilt
-`-0.4217946006575624`, with explicit Realize anchors `(17.12, 60.12, 110.12)` and
-`(0.28, 0.72, 1.57)`. The converter multiplies values by the corresponding scale
-and emits linear spans. Isolated nonzero camera/manual-tilt values without a span
-are diagnosed as omitted.
+Zoom conversion jointly matches relative lane width at the judgment row and lane
+height, then inverts the target normalization. Negative bottom values use a
+different source slope from positive values. Values outside 0–100 use the same
+projection equations, subject to visibility and normalization limits. Source
+geometry crossing the camera plane, reversed lanes, an unavailable judgment-row
+intersection, and unreachable target projections fail with the pulse and values.
+Values are not clamped or extended using a fitted line.
+
+Moving zoom spans are at most `--curve-step` pulses long and are refined until
+quarter-, half- and three-quarter-span landmark errors are at most 0.25 pixels
+in the reference projection. This is a sampled numerical tolerance, not a
+continuous or playback error guarantee. Failure to meet it on the five-pulse
+grid rejects conversion. Both controls share sampling times; changing one can
+also adjust the other. Initial and isolated zoom values are retained.
+
+Manual tilt uses `-8/19` target units per source unit. One raw source unit is
+10 degrees; editor 3600% is raw 36, one turn. Continuous ramps retain their signed
+turn count. Instantaneous changes select an equivalent orientation within half
+a turn, so a jump from 0 to 36 does not introduce a target revolution. Target
+smoothing, different rotation pivots and judgment overlays remain approximation
+limits, including combined zoom/tilt and continuous full turns. Isolated nonzero
+manual tilt values without a span are diagnosed as omitted.
+
+Realize anchors are `(17.12, 60.12, 110.12)` for radius and `(0.28, 0.72, 1.57)`
+for pitch. Camera mapping is fixed; there are no camera gain or scale options.
+It matches selected lane landmarks rather than the entire rendered scene.
+Source projection attribution: [K-Shoot MANIA](https://github.com/kshootmania/ksm-v2);
+its license notice is included in the distribution.
 
 Default conversion warns about omissions and emits the supported chart.
 `--strict` fails for unsupported features; supported sampling and camera

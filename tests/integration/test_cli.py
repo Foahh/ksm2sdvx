@@ -76,17 +76,11 @@ def test_inspect_success_options(tmp_path: Path) -> None:
         "--strict",
         "--curve-step",
         "20",
-        "--zoom-top-scale",
-        "0.1",
-        "--zoom-bottom-scale",
-        "-0.2",
-        "--tilt-scale",
-        "0.3",
     )
     assert result.returncode == 0, result.stderr
     inspection = cast(dict[str, object], json.loads(result.stdout))
     assert inspection["valid"] is True
-    assert '"curve_step": 20' in result.stdout and '"tilt_scale": 0.3' in result.stdout
+    assert '"curve_step": 20' in result.stdout
     assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
 
 

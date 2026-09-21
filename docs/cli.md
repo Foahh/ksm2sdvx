@@ -56,12 +56,12 @@ These options apply to `chart`, `inspect` and `package`:
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--strict` | Off | Reject omitted source features; supported approximations remain allowed |
-| `--curve-step PULSES` | `15` | Positive integer divisible by 5; playback laser curve sampling interval |
-| `--zoom-top-scale NUMBER` | `0.0013225` | Finite multiplier for top camera values |
-| `--zoom-bottom-scale NUMBER` | `-0.00382` | Finite multiplier for bottom camera values |
-| `--tilt-scale NUMBER` | `-0.4217946006575624` | Finite multiplier for manual tilt values |
+| `--curve-step PULSES` | `15` | Positive integer divisible by 5; laser/tilt curve interval and maximum moving zoom span |
 
-Malformed input and unrepresentable timing fail in either mode. Media and
+Camera conversion uses a fixed joint zoom projection and angular tilt mapping.
+See [camera behavior and limits](compatibility.md#chart-conversion).
+
+Malformed input, unrepresentable timing and unsupported zoom projections fail in either mode. Media and
 metadata references do not fail strict chart conversion merely because they are
 absent from chart text. Package creation additionally checks unmapped metadata
 and resources, as described in its [conversion limits](package.md#conversion-limits-and-failures).
