@@ -1,4 +1,4 @@
-"""Contract for a jacket processor; no processor is installed by default."""
+"""Contract for jacket processing implementations."""
 
 from typing import Protocol
 
