@@ -13,14 +13,14 @@ from xml.etree import ElementTree as ET
 import pytest
 from tests.audio_support import SilentS3vEncoder
 from tests.conftest import document
-from tests.support import chart_metadata, database_text, settings
+from tests.support import chart_metadata, settings
 
 from ksm2sdvx.chart import DEFAULT_PROFILE, ConversionOptions, VoxChart
 from ksm2sdvx.chart.conversion.converter import UnsupportedFeaturesError
 from ksm2sdvx.cli import main
 from ksm2sdvx.common.errors import OutputError
 from ksm2sdvx.jacket import FfmpegJacketProcessor, JacketRequest, JacketResult, JacketSettings
-from ksm2sdvx.metadata import MetadataError, PackageMetadata, SdvxMetadataConverter
+from ksm2sdvx.metadata import PackageMetadata, SdvxMetadataConverter
 from ksm2sdvx.music import (
     FfmpegMusicProcessor,
     MusicError,
@@ -70,7 +70,7 @@ def _png(path: Path) -> None:
     )
 
 
-def _inputs(root: Path) -> tuple[Path, Path]:
+def _inputs(root: Path) -> Path:
     source = root / "source"
     source.mkdir()
     (source / "package.toml").write_text(MANIFEST, encoding="utf-8")
@@ -94,10 +94,7 @@ def _inputs(root: Path) -> tuple[Path, Path]:
         )
         audio.writeframes(frames)
     _png(source / "jacket.png")
-    data = root / "reference-data"
-    (data / "others").mkdir(parents=True)
-    (data / "others/music_db.xml").write_text(database_text(), encoding="utf-8")
-    return source / "package.toml", data
+    return source / "package.toml"
 
 
 @pytest.mark.parametrize(
@@ -174,31 +171,12 @@ def test_database_option_validation(tmp_path: Path, extra: str) -> None:
         parse_package_config(MANIFEST + "\n" + extra, base=tmp_path)
 
 
-def test_package_preflight_preserves_inputs_and_rejects_conflicts(tmp_path: Path) -> None:
-    manifest, game = _inputs(tmp_path)
-    config = load_package_config(manifest)
-    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
-    output = tmp_path / "result"
-    with pytest.raises(MetadataError) as error:
-        build_package(
-            replace(config, song_id=1),
-            game_data=game,
-            destination=output,
-            options=ConversionOptions(),
-            profile=DEFAULT_PROFILE,
-        )
-    assert "already exists" in str(error.value)
-    assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
-    assert not output.exists()
-    assert main(["package", str(manifest), "--game-data", str(game), "-o", str(game / "mod")]) == 1
-
-
 @pytest.mark.skipif(
     sys.platform != "win32" or shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
     reason="Package audio encoding requires Windows Media Format and FFmpeg",
 )
 def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     source = manifest.parent
     (source / "advanced.kson").write_bytes((source / "chart.kson").read_bytes())
     manifest.write_text(
@@ -217,7 +195,7 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     )
     before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     output = tmp_path / "data_mods/synthetic"
-    assert main(["package", str(manifest), "--game-data", str(game), "-o", str(output)]) == 0
+    assert main(["package", str(manifest), "-o", str(output)]) == 0
     assert all(path.read_bytes() == content for path, content in before.items())
     expected_music = output / "music/3000_synthetic"
     assert (expected_music / "3000_synthetic_3e.vox").is_file()
@@ -276,11 +254,11 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     assert preview_report["reference"] == "original_full_track"
     assert str(tmp_path) not in report_text and tmp_path.as_posix() not in report_text
     assert json.dumps(str(tmp_path))[1:-1] not in report_text
-    assert main(["package", str(manifest), "--game-data", str(game), "-o", str(output)]) == 1
+    assert main(["package", str(manifest), "-o", str(output)]) == 1
 
 
 def test_package_strict_rejects_unconverted_metadata_before_output(tmp_path: Path) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     chart = manifest.parent / "chart.kson"
     data = cast(dict[str, object], json.loads(chart.read_text(encoding="utf-8")))
     metadata = cast(dict[str, object], data["meta"])
@@ -290,7 +268,6 @@ def test_package_strict_rejects_unconverted_metadata_before_output(tmp_path: Pat
     with pytest.raises(PackageError, match="omit metadata"):
         build_package(
             load_package_config(manifest),
-            game_data=game,
             destination=output,
             options=ConversionOptions(strict=True),
             profile=DEFAULT_PROFILE,
@@ -376,7 +353,7 @@ def _stub_package_media(monkeypatch: pytest.MonkeyPatch) -> _PackageMusic:
 def test_package_allows_charts_without_jackets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, with_jacket: bool, strict: bool
 ) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     source = manifest.parent
     text = MANIFEST.split("[jacket]")[0]
     if with_jacket:
@@ -392,7 +369,6 @@ def test_package_allows_charts_without_jackets(
     output = tmp_path / "mod"
     build_package(
         load_package_config(manifest),
-        game_data=game,
         destination=output,
         options=ConversionOptions(strict=strict),
         profile=DEFAULT_PROFILE,
@@ -415,13 +391,12 @@ def test_package_allows_charts_without_jackets(
 
 
 def test_package_rejects_missing_inputs_for_supplied_jackets(tmp_path: Path) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     (manifest.parent / "jacket.png").unlink()
     output = tmp_path / "mod"
     with pytest.raises(PackageError, match="Missing asset: jacket.png"):
         build_package(
             load_package_config(manifest),
-            game_data=game,
             destination=output,
             options=ConversionOptions(),
             profile=DEFAULT_PROFILE,
@@ -432,7 +407,7 @@ def test_package_rejects_missing_inputs_for_supplied_jackets(tmp_path: Path) -> 
 def test_package_uses_tempo_range_without_display_bpm(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     path = manifest.parent / "chart.kson"
     data = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
     cast(dict[str, object], data["meta"]).pop("disp_bpm")
@@ -442,7 +417,6 @@ def test_package_uses_tempo_range_without_display_bpm(
     output = tmp_path / "mod"
     build_package(
         load_package_config(manifest),
-        game_data=game,
         destination=output,
         options=ConversionOptions(strict=True),
         profile=DEFAULT_PROFILE,
@@ -462,7 +436,7 @@ def test_package_renders_each_difficulty_and_publishes_only_complete_results(
     fail_after: int | None,
     with_keysounds: bool,
 ) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     source = manifest.parent
     if with_keysounds:
         chart = source / "chart.kson"
@@ -488,7 +462,6 @@ def test_package_renders_each_difficulty_and_publishes_only_complete_results(
         with pytest.raises(MusicError, match="Renderer failed"):
             build_package(
                 config,
-                game_data=game,
                 destination=output,
                 options=ConversionOptions(strict=True),
                 profile=DEFAULT_PROFILE,
@@ -498,7 +471,6 @@ def test_package_renders_each_difficulty_and_publishes_only_complete_results(
         return
     build_package(
         config,
-        game_data=game,
         destination=output,
         options=ConversionOptions(strict=True),
         profile=DEFAULT_PROFILE,
@@ -531,7 +503,7 @@ def test_package_renders_each_difficulty_and_publishes_only_complete_results(
 def test_package_strict_consumes_file_keysounds_only_after_rendering(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_bank: bool
 ) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     chart = manifest.parent / "chart.kson"
     chart.write_text(
         document(
@@ -558,7 +530,6 @@ def test_package_strict_consumes_file_keysounds_only_after_rendering(
         with pytest.raises(MusicError, match="Cannot copy bundled silent keysound bank"):
             build_package(
                 load_package_config(manifest),
-                game_data=game,
                 destination=output,
                 options=ConversionOptions(strict=True),
                 profile=DEFAULT_PROFILE,
@@ -568,7 +539,6 @@ def test_package_strict_consumes_file_keysounds_only_after_rendering(
         return
     build_package(
         load_package_config(manifest),
-        game_data=game,
         destination=output,
         options=ConversionOptions(strict=True),
         profile=DEFAULT_PROFILE,
@@ -593,7 +563,7 @@ def test_package_strict_consumes_file_keysounds_only_after_rendering(
 def test_package_rendering_does_not_bypass_unrelated_strict_omissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    manifest, game = _inputs(tmp_path)
+    manifest = _inputs(tmp_path)
     chart = manifest.parent / "chart.kson"
     chart.write_text(
         document(
@@ -608,7 +578,6 @@ def test_package_rendering_does_not_bypass_unrelated_strict_omissions(
     with pytest.raises(UnsupportedFeaturesError, match="Strict conversion"):
         build_package(
             load_package_config(manifest),
-            game_data=game,
             destination=output,
             options=ConversionOptions(strict=True),
             profile=DEFAULT_PROFILE,

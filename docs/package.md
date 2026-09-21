@@ -16,11 +16,10 @@ Python runtime dependencies remain standard-library only.
 2. Copy [examples/package.toml](../examples/package.toml) into that directory.
    Set `name`, `song_id`, and a `[[charts]]` entry for each difficulty. Choose an
    unused song ID; the example ID is not reserved.
-3. Run the command from the project root, using the location of your TOML file
-   and a reference game data directory:
+3. Run the command from the project root, using the location of your TOML file:
 
    ```text
-   uv run ksm2sdvx package song/package.toml --game-data reference/data
+   uv run ksm2sdvx package song/package.toml
    ```
 
 The default output is `output/data_mods/<name>/`. Check the report inside it,
@@ -36,8 +35,7 @@ and [conversion limits](#conversion-limits-and-failures).
 | Argument or option | Default | Meaning |
 | --- | --- | --- |
 | `MANIFEST` | Required | Path to the TOML configuration |
-| `--game-data PATH` | Required | Reference data directory containing `others/music_db.xml` |
-| `-o PATH`, `--output PATH` | `output/data_mods/<name>` | New mod directory; must not exist or be inside the reference data directory |
+| `-o PATH`, `--output PATH` | `output/data_mods/<name>` | New mod directory; must not exist |
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Audio and image processing executable |
 | `--ffprobe EXECUTABLE` | `ffprobe` | Image probing executable |
 | `--strict` | Off | Reject omitted source features, including unmapped package metadata/resources |
@@ -45,8 +43,8 @@ and [conversion limits](#conversion-limits-and-failures).
 | `-h`, `--help` | — | Show command help |
 
 Command-line paths resolve from the working directory. `-o` names the mod
-directory itself, for example `exports/data_mods/my_song`. The reference database
-and archive are read-only inputs. These command options are not TOML fields.
+directory itself, for example `exports/data_mods/my_song`. No game database or
+archive is needed to build a package. These command options are not TOML fields.
 Camera mapping and its projection limits are described in
 [conversion compatibility](compatibility.md#chart-conversion).
 
@@ -71,13 +69,13 @@ database's version field. JSON output reports have their own schema versions.
 | `music` | Optional table | Loudness and peak settings |
 | `jacket` | Optional table | Shared artwork and credit overrides |
 
-IDs already in the reference database are rejected. Assign IDs that also avoid
-other installed mods. The supported target uses fixed song tables: IDs above
+Song ID conflicts are not checked. Choose an ID that avoids the game's existing
+songs and other installed mods. The supported target uses fixed song tables: IDs above
 3071 are rejected. LayeredFS does not expand those tables. The example ID 3000
 is not reserved; verify that it is unused in your installation.
 
-One command creates one new song; existing songs are not
-replaced and song grouping is never inferred. Metadata entries are constructed
+One command creates one song package; song grouping is never inferred.
+Metadata entries are constructed
 from source values and target defaults without selecting an existing song.
 
 For `name = "my_song"` and `song_id = 3000`, the default mod directory is
@@ -271,7 +269,7 @@ Place the finished `my_song` directory under the target's `data_mods` directory.
 The `graphics/s_jacket00_ifs` folder supplies selector images to LayeredFS.
 Conversion needs no jacket archive; at runtime, LayeredFS extends the game's
 `s_jacket00.ifs`. No game archive is copied into the package. The XML fragment
-adds a new entry rather than duplicating an existing ID.
+contains the assigned song ID under a fixed `<mdb>` root with no attributes.
 
 The schema-version-1 package report records chart conversion reports, source
 paths relative to the package root, per-difficulty rendering and audio
@@ -289,7 +287,7 @@ and unspecified maximum EX score remain allowed in strict mode.
 Automatic song grouping, replacing existing songs and automatic score/radar
 calculation are not implemented. Missing referenced
 files, references outside the source root, invalid source/configuration data,
-unrepresentable chart timing and ID/output collisions fail in either mode.
+unrepresentable chart timing and output collisions fail in either mode.
 
 Success returns 0, expected input or processing failures return 1, and argument
 errors return 2. Media or serialization failures do not publish a partial mod.

@@ -6,7 +6,6 @@ from decimal import Decimal, InvalidOperation
 from xml.etree import ElementTree as ET
 
 from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
-from ksm2sdvx.metadata.database import XmlElement, from_element, to_element
 from ksm2sdvx.metadata.errors import MetadataError
 from ksm2sdvx.metadata.models import (
     MAX_SONG_ID,
@@ -19,6 +18,7 @@ from ksm2sdvx.metadata.models import (
     SdvxMetadata,
     SdvxMetadataSettings,
 )
+from ksm2sdvx.metadata.xml import XmlElement, from_element, to_element
 
 
 def _integer(value: int, *, name: str, minimum: int, maximum: int | None = None) -> int:
@@ -168,8 +168,6 @@ class SdvxMetadataConverter:
     ) -> MetadataResult[SdvxMetadata]:
         """Build a new entry from source metadata and explicit target defaults."""
         _integer(settings.song_id, name="song_id", minimum=1, maximum=MAX_SONG_ID)
-        if settings.song_id in settings.database.song_ids:
-            raise MetadataError(f"Song ID {settings.song_id} already exists in the music database")
         if not source.charts or not settings.charts:
             raise MetadataError("At least one chart and slot assignment are required")
         sources = {chart.source: chart for chart in source.charts}
@@ -260,7 +258,6 @@ class SdvxMetadataConverter:
             settings.charts,
             volume,
             version,
-            settings.database.attributes,
         )
         # Verify encoding while conversion errors still have their metadata context.
         serialize_music_database(metadata)
@@ -284,7 +281,7 @@ class SdvxMetadataConverter:
 
 def serialize_music_database(metadata: SdvxMetadata) -> bytes:
     """Serialize one new entry for others/music_db.merged.xml in Windows Shift-JIS."""
-    root = to_element(XmlElement("mdb", metadata.root_attributes, children=(metadata.entry,)))
+    root = to_element(XmlElement("mdb", children=(metadata.entry,)))
     ET.indent(root, space="  ")
     text = (
         '<?xml version="1.0" encoding="shift-jis"?>\n'

@@ -46,7 +46,7 @@ src/ksm2sdvx/
   metadata/
     models.py       source metadata, slot assignments and SDVX metadata
     interfaces.py   MetadataConverter protocol
-    database.py     immutable XML records and reference database loading
+    xml.py          immutable XML records for generated metadata
     converter.py    new-song metadata conversion and XML serialization
     errors.py       metadata validation and encoding failures
   resources/
@@ -212,14 +212,15 @@ The [complete configuration reference](package.md#complete-configuration-referen
 documents all accepted fields and their defaults.
 
 `SdvxMetadataConverter` builds a new ID from chart levels, authors, title, artist,
-BPM and resource names. It checks the reference database for ID collisions,
-disables unselected slots, and emits explicit target defaults. Jacket credits
+BPM and resource names. It disables unselected slots and emits explicit target
+defaults. The user assigns song IDs; conversion does not check installed IDs. Jacket credits
 come from KSON unless shared or per-chart jacket settings override the author.
 `ChartRadar` preserves six optional per-chart values; song and chart database
 controls accept explicit overrides validated against their XML integer types.
 Score and radar calculation are not implemented: unspecified radar values and
 maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
-`music_db.merged.xml` fragment and rejects text that cannot be encoded.
+`music_db.merged.xml` fragment with a fixed, attribute-free `<mdb>` root and
+rejects text that cannot be encoded. No reference database is required.
 
 ### Audio rendering and encoding
 
@@ -253,8 +254,8 @@ preserving the full image's aspect ratio with black margins (contain).
 
 `LayeredFsPackageWriter` checks relative paths and collisions, stages charts,
 processed assets, metadata and a report, then publishes a new mod directory.
-The caller must choose an unused destination. Source assets and the reference
-database are never modified. Concurrent writers must use distinct destinations.
+The caller must choose an unused destination. Source assets are never modified.
+Concurrent writers must use distinct destinations.
 
 FX event translation belongs to chart conversion. Audio rendering belongs to the
 music component. Source effect information remains available for both boundaries;

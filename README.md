@@ -24,7 +24,7 @@ with [examples/package.toml](examples/package.toml), copy it into your song
 directory, and run:
 
 ```sh
-uv run ksm2sdvx package song/package.toml --game-data reference/data
+uv run ksm2sdvx package song/package.toml
 ```
 
 Package creation needs Windows with the Windows Media Format runtime, plus

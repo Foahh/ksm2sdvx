@@ -1,7 +1,7 @@
 # Configure one song. Place this file alongside your charts and media.
 # Chart and jacket paths are relative to this file's directory.
 # Remove the leading # from an optional setting to override its default.
-# Build: uv run ksm2sdvx package package.toml --game-data reference/data
+# Build: uv run ksm2sdvx package package.toml
 
 name = "my_song" # Folder and resource names; use letters, digits, _ or -.
 song_id = 3000 # Example only; choose an unused ID from 1 to 3071.

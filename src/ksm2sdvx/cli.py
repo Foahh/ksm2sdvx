@@ -30,7 +30,6 @@ class Arguments(ChartArguments, AudioArguments, JacketArguments):
     sources: tuple[Path, ...] = ()
     root: Path = Path()
     manifest: Path = Path()
-    game_data: Path = Path()
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
 
@@ -53,12 +52,6 @@ def _parser() -> argparse.ArgumentParser:
     inspect.add_argument("--root", type=Path, required=True)
     package = commands.add_parser("package", help="Build a new-song data_mods package")
     package.add_argument("manifest", type=Path)
-    package.add_argument(
-        "--game-data",
-        type=Path,
-        required=True,
-        help="Reference data directory containing others/music_db.xml and graphics",
-    )
     package.add_argument("-o", "--output", type=Path, help="New mod directory (must not exist)")
     package.add_argument("--ffmpeg", default="ffmpeg")
     package.add_argument("--ffprobe", default="ffprobe")
@@ -108,7 +101,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             config = load_package_config(args.manifest)
             result = build_package(
                 config,
-                game_data=args.game_data,
                 destination=args.output or Path("output/data_mods") / config.name,
                 options=conversion_options(args),
                 profile=DEFAULT_PROFILE,

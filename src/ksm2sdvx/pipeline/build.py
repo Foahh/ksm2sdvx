@@ -31,7 +31,6 @@ from ksm2sdvx.metadata import (
     PackageMetadata,
     SdvxMetadataConverter,
     SdvxMetadataSettings,
-    load_music_database,
     serialize_music_database,
 )
 from ksm2sdvx.music import FfmpegMusicProcessor, MusicRequest, S3vMusicSettings
@@ -167,7 +166,6 @@ def _source_metadata(chart: _Chart) -> ChartMetadata:
 def build_package(
     config: PackageConfig,
     *,
-    game_data: Path,
     destination: Path,
     options: ConversionOptions,
     profile: VoxProfile,
@@ -175,11 +173,10 @@ def build_package(
     ffprobe: str = "ffprobe",
     renderer: AudioRenderer | None = None,
 ) -> PackageWriteResult:
-    """Build one explicitly grouped song; never modify the reference game data."""
+    """Build one explicitly grouped song into a new mod directory."""
     try:
         return _build_package(
             config,
-            game_data=game_data,
             destination=destination,
             options=options,
             profile=profile,
@@ -194,7 +191,6 @@ def build_package(
 def _build_package(
     config: PackageConfig,
     *,
-    game_data: Path,
     destination: Path,
     options: ConversionOptions,
     profile: VoxProfile,
@@ -207,13 +203,9 @@ def _build_package(
     config = replace(config, root=config.root.resolve())
     if any(chart.slot not in ChartSlot for chart in config.charts):
         raise PackageError("Package charts must use valid target slots")
-    game_data = game_data.resolve()
     destination = destination.resolve()
-    if destination.is_relative_to(game_data):
-        raise PackageError("Package output must be outside the reference game data directory")
     if destination.exists():
         raise PackageError("Package output already exists; choose a new destination")
-    database = load_music_database(game_data / "others/music_db.xml")
     charts, assets, diagnostics = _load_charts(config, options, profile)
     jackets = {
         chart.binding.path: _owned_resource(assets, chart.binding.path, "jacket")
@@ -292,7 +284,6 @@ def _build_package(
     converted_metadata = SdvxMetadataConverter().convert(
         metadata_source,
         settings=SdvxMetadataSettings(
-            database=database,
             song_id=config.song_id,
             charts=assignments,
             ascii_name=config.name,

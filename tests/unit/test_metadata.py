@@ -4,7 +4,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
-from tests.support import chart_metadata, database_text, settings
+from tests.support import chart_metadata, settings
 
 from ksm2sdvx.metadata import (
     ChartAssignment,
@@ -14,8 +14,6 @@ from ksm2sdvx.metadata import (
     MetadataField,
     PackageMetadata,
     SdvxMetadataConverter,
-    load_music_database,
-    parse_music_database,
     serialize_music_database,
 )
 
@@ -29,7 +27,7 @@ def test_new_song_fragment_fields_slots_encoding_and_names() -> None:
     assert encoded.startswith(b'<?xml version="1.0" encoding="shift-jis"?>\n')
     assert b"\r" not in encoded
     fragment = ET.fromstring(encoded.decode("cp932"))
-    assert fragment.attrib == {"revision": "fixture"}
+    assert fragment.tag == "mdb" and fragment.attrib == {}
     assert [entry.get("id") for entry in fragment] == ["3000"]
     assert fragment.findtext("music/info/title_name") == source.charts[0].title
     assert fragment.findtext("music/info/title_yomigana") == source.charts[0].title
@@ -65,10 +63,6 @@ def test_new_song_fragment_fields_slots_encoding_and_names() -> None:
         "RADAR_NOT_COMPUTED",
         "MAX_EXSCORE_NOT_COMPUTED",
     }
-    assert (
-        configuration.database.entry(1).element.child("info").child("title_name").text
-        == "Existing song"
-    )
     assert source.charts[0].audio_offset == 120
 
 
@@ -221,11 +215,10 @@ def test_invalid_target_names(ascii_name: str | None) -> None:
         )
 
 
-def test_collisions_and_assignment_errors() -> None:
+def test_assignment_errors() -> None:
     source = PackageMetadata((chart_metadata(),))
     converter = SdvxMetadataConverter()
     for configuration, message in (
-        (replace(settings(), song_id=1), "already exists"),
         (replace(settings(), charts=()), "At least one"),
         (replace(settings(), charts=settings().charts * 2), "assigned exactly once"),
         (
@@ -267,42 +260,6 @@ def test_unrepresentable_bpm(minimum: float, maximum: float) -> None:
         )
 
 
-def test_load_database_encoding_and_read_only(tmp_path: Path) -> None:
-    path = tmp_path / "music_db.xml"
-    text = database_text().replace("Existing artist", "作曲者")
-    original = ('<?xml version="1.0" encoding="shift-jis"?>\n' + text).encode("cp932")
-    path.write_bytes(original)
-    database = load_music_database(path)
-    assert database.song_ids == {1}
-    assert database.entry(1).element.child("info").child("artist_name").text == "作曲者"
-    assert path.read_bytes() == original
-    with pytest.raises(MetadataError, match="Cannot read"):
-        load_music_database(tmp_path / "absent.xml")
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "<bad/>",
-        "<mdb><music/></mdb>",
-        "<mdb><music id='-1'/></mdb>",
-        "<mdb><music id='1'/></mdb>",
-        "<!DOCTYPE mdb><mdb/>",
-        "<mdb>",
-    ],
-)
-def test_invalid_database(text: str) -> None:
-    with pytest.raises(MetadataError):
-        parse_music_database(text)
-
-
-def test_duplicate_song_ids_rejected() -> None:
-    root = ET.fromstring(database_text())
-    root.append(ET.fromstring(database_text())[0])
-    with pytest.raises(MetadataError, match="duplicated"):
-        parse_music_database(ET.tostring(root, encoding="unicode"))
-
-
 @pytest.mark.parametrize("song_id", [0, -1, 3072, 9001, 10001, 32768, True])
 def test_song_id_must_fit_target_song_tables(song_id: int) -> None:
     with pytest.raises(MetadataError, match="song_id"):
@@ -312,12 +269,13 @@ def test_song_id_must_fit_target_song_tables(song_id: int) -> None:
         )
 
 
-def test_highest_supported_song_id() -> None:
+@pytest.mark.parametrize("song_id", [1, 3071])
+def test_supported_song_id_boundaries(song_id: int) -> None:
     result = SdvxMetadataConverter().convert(
-        PackageMetadata((chart_metadata(),)), settings=replace(settings(), song_id=3071)
+        PackageMetadata((chart_metadata(),)), settings=replace(settings(), song_id=song_id)
     )
-    assert result.metadata.song_id == 3071
-    assert result.metadata.stem == "3071_new_song"
+    assert result.metadata.song_id == song_id
+    assert result.metadata.stem == f"{song_id:04}_new_song"
 
 
 @pytest.mark.parametrize("price,limited", [(-(2**31) - 1, 0), (2**31, 0), (0, -1), (0, 256)])
@@ -337,7 +295,6 @@ def test_new_entry_needs_no_existing_song_and_reads_source_jacket_author(slot: C
     )
     configuration = replace(
         settings(),
-        database=parse_music_database("<mdb/>"),
         charts=(ChartAssignment(source.source, slot),),
     )
     result = SdvxMetadataConverter().convert(PackageMetadata((source,)), settings=configuration)

@@ -19,7 +19,7 @@ uv run ksm2sdvx audio SOURCE [-o OUTPUT] [audio options]
 uv run ksm2sdvx audio --chart CHART.kson [-o OUTPUT] [--strict] [audio options]
 uv run ksm2sdvx jacket SOURCE [-o OUTPUT] [jacket options]
 uv run ksm2sdvx inspect SOURCE... --root ROOT [conversion options]
-uv run ksm2sdvx package MANIFEST --game-data DATA [-o OUTPUT] [package options]
+uv run ksm2sdvx package MANIFEST [-o OUTPUT] [package options]
 ```
 
 `uv run python -m ksm2sdvx` accepts the same commands and arguments. Use
@@ -87,7 +87,7 @@ and resources, as described in its [conversion limits](package.md#conversion-lim
 
 Standalone chart and media commands may replace their output files after staging.
 Package creation requires a new destination and publishes the directory after
-processing succeeds. Source files and reference game data are never overwritten.
+processing succeeds. Source files are never overwritten; no game installation is required.
 
 ## Exit codes and reports
 

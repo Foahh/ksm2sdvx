@@ -7,8 +7,8 @@ from pathlib import Path, PurePosixPath
 
 from ksm2sdvx.common.diagnostics import Diagnostic
 from ksm2sdvx.common.types import JsonValue, Milliseconds
-from ksm2sdvx.metadata.database import MusicDatabase, XmlElement
 from ksm2sdvx.metadata.errors import MetadataError
+from ksm2sdvx.metadata.xml import XmlElement
 
 # Upper bound for ordinary song IDs in the supported target's song tables.
 MAX_SONG_ID = 3071
@@ -105,7 +105,6 @@ class ChartAssignment:
 
 @dataclass(frozen=True, slots=True)
 class SdvxMetadataSettings:
-    database: MusicDatabase
     song_id: int
     charts: tuple[ChartAssignment, ...]
     ascii_name: str | None = None
@@ -134,7 +133,6 @@ class SdvxMetadata:
     assignments: tuple[ChartAssignment, ...]
     volume: int
     version: int
-    root_attributes: tuple[tuple[str, str], ...] = ()
 
     @property
     def stem(self) -> str:
