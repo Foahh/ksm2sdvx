@@ -133,6 +133,8 @@ def validate_kson(chart: KsonChart) -> None:
     camera = chart.camera
     validate_graph(camera.zoom_top, "/camera/cam/body/zoom_top")
     validate_graph(camera.zoom_bottom, "/camera/cam/body/zoom_bottom")
+    validate_graph(camera.rotation_deg, "/camera/cam/body/rotation_deg")
+    validate_graph(camera.center_split, "/camera/cam/body/center_split")
     ordered((point.pulse for point in camera.tilt), "/camera/tilt")
     for i, tilt in enumerate(camera.tilt):
         p = f"/camera/tilt/{i}"

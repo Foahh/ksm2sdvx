@@ -351,9 +351,7 @@ class Parser:
         for key, points in graphs.items():
             validate_graph(points, f"/camera/cam/body/{key}")
         unsupported = [
-            Extension(f"/camera/cam/body/{k}", body[k])
-            for k in ("zoom_side", "rotation_deg", "center_split")
-            if graphs.get(k)
+            Extension(f"/camera/cam/body/{k}", body[k]) for k in ("zoom_side",) if graphs.get(k)
         ]
         pattern = self.object(cam.get("pattern", {}), "/camera/cam/pattern", ("laser",))
         laser = self.object(pattern.get("laser", {}), "/camera/cam/pattern/laser", ("slam_event",))
@@ -398,11 +396,13 @@ class Parser:
             for i, v in enumerate(arr(data.get("tilt", ()), "/camera/tilt"))
         )
         return CameraInfo(
-            graphs.get("zoom_top", ()),
-            graphs.get("zoom_bottom", ()),
-            tilts,
-            tuple(spins),
-            tuple(unsupported),
+            zoom_top=graphs.get("zoom_top", ()),
+            zoom_bottom=graphs.get("zoom_bottom", ()),
+            rotation_deg=graphs.get("rotation_deg", ()),
+            center_split=graphs.get("center_split", ()),
+            tilt=tilts,
+            spins=tuple(spins),
+            unsupported=tuple(unsupported),
         )
 
     def effects(self, value: JsonValue, path: str, *, fx: bool) -> EffectGroup:

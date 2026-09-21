@@ -61,6 +61,7 @@ class TiltNode(IntEnum):
 class ControllerName(StrEnum):
     RADIUS = "CAM_Radi"
     ROTATION_X = "CAM_RotX"
+    ROTATION_Z = "BIL_RotZ"
     TILT = "Tilt"
     MORPHING_2 = "Morphing2"
 
@@ -154,13 +155,15 @@ class AirScale:
 
 @dataclass(frozen=True, slots=True)
 class ControllerSpan:
+    """Linear endpoints in controller units; BIL_RotZ uses degrees."""
+
     position: VoxPosition
     name: ControllerName
     duration: VoxTick
     start_value: float
     end_value: float
     node_type: TiltNode = TiltNode.CONTINUE
-    unused_c2: int = 2
+    start_mode: int = 2  # C2; 2 selects the explicit start value for body controls.
     unused_c7: float = 0
 
 
@@ -176,7 +179,6 @@ class ManualSpeed:
 class OpaqueControllerName(StrEnum):
     """Commands whose complete payload layout is not specified."""
 
-    ROTATION_Z = "BIL_RotZ"
     LANE_Y = "LaneY"
     HUD_Y = "HudY"
     BAR_OFF = "BAROFF"

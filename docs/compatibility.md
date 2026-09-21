@@ -19,7 +19,9 @@ have additional behavior described below.
 | Zero auto tilt | Manual zero hold; transition behavior is approximate |
 | Other auto tilt modes | Explicit unsupported-feature diagnostics |
 | Spins and half-spins | Positive durations attach to matching slams; zero-duration events emit no roll and are reported as no-ops |
-| Swing and other camera body controls | Preserved with unsupported-feature diagnostics |
+| Center split | Initial Morphing2 mapping; playback unverified |
+| Body rotation in degrees | Initial BIL_RotZ mapping; playback unverified |
+| Swing and zoom side | Preserved with unsupported-feature diagnostics |
 | Scroll speed, including negative values | Converted to signed ManualSpeed updates; linear and curved ramps are sampled |
 | Stops (`beat.stop`) | Native BPM pause flags; overlapping and touching intervals merged |
 | Effect definitions, automation, invocations | Preserved; standalone chart output diagnoses absent audio rendering |
@@ -105,6 +107,19 @@ value, including zero, holds until the next automatic setting or the chart ends.
 The automatic mode `"zero"` also emits a manual zero hold, lasting until the next
 tilt setting or chart end. It does not create ramps to adjacent manual values.
 Its entry and exit transitions can differ from the source automatic tilt fade.
+
+`center_split` uses `Morphing2 = 0.00712 × value`; 100 source units add one
+BT lane's width between the halves. Signed values are retained without clamping.
+`rotation_deg` uses the same signed degree value in `BIL_RotZ`, serialized with
+the `d` prefix. Continuous full turns remain unwrapped, and jumps use equal
+start/end values with zero duration. BIL rotation is independent of manual tilt;
+it rotates the rendered view, so the pivot and projection differ from KSM.
+
+Both body graphs retain initial values, jumps and final holds. Linear spans
+split at BPM changes; curves use `--curve-step` sampling with no continuous error
+bound. Their anchors contribute to chart end. These initial mappings are allowed
+in strict mode but report approximations. Playback, including combined zoom,
+tilt, split and rotation, remains unverified.
 
 Realize anchors are `(17.12, 60.12, 110.12)` for radius and `(0.28, 0.72, 1.57)`
 for pitch. Camera mapping is fixed; there are no camera gain or scale options.

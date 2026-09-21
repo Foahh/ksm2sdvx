@@ -64,7 +64,13 @@ def convert_chart(
         *(s.pulse for s in samples),
     )
     controllers, tilt_modes, camera_end = convert_camera(
-        chart.camera, timeline, options, profile, report, end
+        chart.camera,
+        timeline,
+        options,
+        profile,
+        report,
+        end,
+        tuple(e.pulse for e in chart.beat.bpm),
     )
     controllers = tuple(sorted((*controllers, *scroll), key=lambda event: event.position))
     left = tuple(s.event for s in samples if s.track == 1)

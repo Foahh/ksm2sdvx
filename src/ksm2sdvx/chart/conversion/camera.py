@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from math import fmod, isfinite
 
+from ksm2sdvx.chart.conversion.camera_body import CENTER_SPLIT_SCALE, body_graph
 from ksm2sdvx.chart.conversion.lasers import LaserSample
 from ksm2sdvx.chart.conversion.options import ConversionOptions
 from ksm2sdvx.chart.conversion.profiles import VoxProfile
@@ -23,6 +24,7 @@ from ksm2sdvx.chart.vox.model import (
     RollType,
     TiltMode,
     TiltNode,
+    VoxPosition,
     VoxTiltMode,
 )
 from ksm2sdvx.common.diagnostics import FeatureStatus
@@ -184,13 +186,14 @@ def convert_camera(
     profile: VoxProfile,
     report: ReportBuilder,
     end_pulse: int,
+    bpm_pulses: tuple[int, ...],
 ) -> tuple[tuple[Controller, ...], tuple[VoxTiltMode, ...], int]:
     start = timeline.position(0)
-    controllers: list[tuple[int, int, Controller]] = [
-        (0, 0, Realize(start, 3, *profile.radius_anchors)),
-        (0, 1, Realize(start, 4, *profile.rotation_anchors)),
-        (0, 2, AirScale(start, False, 1, 0, 0, 1, 0, 0)),
-        (0, 3, AirScale(start, True, 1, 0, 0, 2, 0, 0)),
+    controllers: list[tuple[VoxPosition, int, Controller]] = [
+        (start, 0, Realize(start, 3, *profile.radius_anchors)),
+        (start, 1, Realize(start, 4, *profile.rotation_anchors)),
+        (start, 2, AirScale(start, False, 1, 0, 0, 1, 0, 0)),
+        (start, 3, AirScale(start, True, 1, 0, 0, 2, 0, 0)),
     ]
     report.count("camera_realize_rows", 2)
     report.count("air_scale_rows", 2)
@@ -206,7 +209,7 @@ def convert_camera(
             span.end * scale,
             TiltNode(node),
         )
-        controllers.append((span.pulse, len(controllers), row))
+        controllers.append((row.position, len(controllers), row))
         end = max(end, span.pulse + span.duration)
 
     radius = Normalization(*profile.radius_anchors)
@@ -250,6 +253,40 @@ def convert_camera(
                 1,
             )
             report.count("camera_rows")
+
+    for feature, points, name, scale, code, message in (
+        (
+            "center_split",
+            camera.center_split,
+            ControllerName.MORPHING_2,
+            CENTER_SPLIT_SCALE,
+            "CENTER_SPLIT_MAPPING",
+            "Center split uses Morphing2; playback is unverified.",
+        ),
+        (
+            "rotation_deg",
+            camera.rotation_deg,
+            ControllerName.ROTATION_Z,
+            1.0,
+            "ROTATION_DEG_MAPPING",
+            "Rotation uses BIL_RotZ; playback is unverified.",
+        ),
+    ):
+        if not points:
+            continue
+        rows = body_graph(points, timeline, options.curve_step, bpm_pulses, name, scale)
+        for row in rows:
+            controllers.append((row.position, len(controllers), row))
+        end = max(end, points[-1].pulse)
+        report.count(f"{feature}_points", len(points))
+        report.count(f"{feature}_rows", len(rows))
+        report.record(
+            feature,
+            FeatureStatus.APPROXIMATED,
+            f"/camera/cam/body/{feature}",
+            code=code,
+            message=message,
+        )
 
     tilt = rebase_tilt(camera.tilt)
     if tilt != camera.tilt:

@@ -139,6 +139,8 @@ class SpinEvent:
 class CameraInfo:
     zoom_top: tuple[GraphPoint, ...] = ()
     zoom_bottom: tuple[GraphPoint, ...] = ()
+    rotation_deg: tuple[GraphPoint, ...] = ()
+    center_split: tuple[GraphPoint, ...] = ()
     tilt: tuple[TiltEvent, ...] = ()
     spins: tuple[SpinEvent, ...] = ()
     unsupported: tuple[Extension, ...] = ()

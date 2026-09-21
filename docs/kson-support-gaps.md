@@ -15,8 +15,6 @@ features. Empty or inactive values may not produce a diagnostic.
 | KSON field | Remaining work | Diagnostic |
 | --- | --- | --- |
 | `camera.cam.body.zoom_side` | Map this camera graph | `UNSUPPORTED_CAMERA` |
-| `camera.cam.body.rotation_deg` | Map this camera graph | `UNSUPPORTED_CAMERA` |
-| `camera.cam.body.center_split` | Map this camera graph | `UNSUPPORTED_CAMERA` |
 | `camera.cam.pattern.laser.slam_event.swing` | Convert swing events and their `scale`, `repeat`, and `decay_order` parameters | `UNSUPPORTED_CAMERA` |
 | `camera.tilt`: `biggest`, `keep_normal`, `keep_biggest` | Map the remaining automatic tilt modes | `UNSUPPORTED_TILT_MODE` |
 | `audio.audio_effect.fx.def`, `audio.audio_effect.laser.def` | Implement authored effect definitions and parameters | `UNSUPPORTED_EFFECT_DEFINITION` |
@@ -59,6 +57,8 @@ Resource existence checks do not establish that a resource will be used.
 | Spin duration | Uses the documented duration mapping; durations not divisible by 60 KSON pulses fail conversion |
 | Curved lasers and manual tilt | Sampled at `--curve-step`; no continuous error bound |
 | Zero automatic tilt | Uses a manual hold; entry/exit transitions can differ from the source fade |
+| Center split | Initial Morphing2 scale; playback and combinations with other camera controls remain unverified |
+| Body rotation in degrees | Initial BIL_RotZ mapping; pivot and projection differ; playback and combined controls remain unverified |
 | Zoom top/bottom | Joint projection with sampled landmark tolerance; unreachable projections or tolerance failures on the target grid reject conversion |
 | `beat.scroll_speed` ramps | Sampled as held multipliers; no continuous interpolation or note-travel error bound |
 | Negative `beat.scroll_speed` | Signed values are emitted and allowed in strict mode; reverse-scroll rendering and judgment remain unverified in gameplay |

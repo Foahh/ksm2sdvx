@@ -189,12 +189,21 @@ def validate_controllers(
         elif isinstance(event, ControllerSpan):
             finite(event.start_value)
             finite(event.end_value)
-            integer(event.unused_c2, None)
+            integer(event.start_mode, None)
             finite(event.unused_c7)
             if type(event.name) is not ControllerName or type(event.node_type) is not TiltNode:
                 raise ConversionError("Invalid controller span")
             if event.name != ControllerName.TILT and event.node_type != TiltNode.CONTINUE:
                 raise ConversionError("Only Tilt has a node type")
+            if event.name in (ControllerName.ROTATION_Z, ControllerName.MORPHING_2) and any(
+                abs(value) > float.fromhex("0x1.fffffep+127")
+                for value in (
+                    event.start_value,
+                    event.end_value,
+                    event.end_value - event.start_value,
+                )
+            ):
+                raise ConversionError(f"{event.name.value} span exceeds the float32 range")
             if absolute + integer(event.duration) > end:
                 raise ConversionError("Controller duration exceeds end position")
         elif isinstance(event, ManualSpeed):
