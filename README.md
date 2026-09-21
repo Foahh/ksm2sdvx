@@ -11,7 +11,7 @@ On Windows, source builds need MSVC with the C++ desktop tools, CMake 3.26 or
 later, and an x64 developer terminal. Initialize the pinned upstream audio code,
 install the project, then convert one chart:
 
-```text
+```sh
 git submodule update --init external/ksm-v2
 git -C external/ksm-v2 submodule update --init ksmaudio kson
 uv sync
@@ -23,13 +23,12 @@ does not process its music or artwork. To build a complete song package, start
 with [examples/package.toml](examples/package.toml), copy it into your song
 directory, and run:
 
-```text
+```sh
 uv run ksm2sdvx package song/package.toml --game-data reference/data
 ```
 
 Package creation needs Windows with the Windows Media Format runtime, plus
-FFmpeg and FFprobe. It writes a new mod directory; it does not install the mod.
-See [package creation](docs/package.md) for setup, configuration, and output.
+FFmpeg and FFprobe. See [package creation](docs/package.md) for setup, configuration, and output.
 
 ## Other commands
 
@@ -43,20 +42,11 @@ See [package creation](docs/package.md) for setup, configuration, and output.
 Run `uv run ksm2sdvx --help` for command help. The [command reference](docs/cli.md)
 explains output paths, shared options, exit codes, and reports.
 
-## Documentation
-
-- [Conversion compatibility](docs/compatibility.md): supported KSON behavior,
-  approximations, and target limits.
-- [KSON support gaps](docs/kson-support-gaps.md): unsupported fields and remaining
-  work.
-- [Architecture](docs/architecture.md): components and their boundaries.
-- [Offline renderer](native/README.md): native audio helper and its protocol.
-
 ## Development
 
 Run the checks and build:
 
-```text
+```sh
 uv sync
 uv run ruff check src tests
 uv run ruff format --check src tests
@@ -65,9 +55,9 @@ uv run pytest
 uv build
 ```
 
-Native DSP tests use generated audio:
+Native tests:
 
-```text
+```sh
 cmake -S . -B build/native -DBUILD_TESTING=ON
 cmake --build build/native --config Release
 ctest --test-dir build/native -C Release --output-on-failure
