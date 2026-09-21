@@ -108,7 +108,8 @@ See [media commands](media.md) for options and defaults.
 
 Media processing, metadata conversion and package writing have concrete
 implementations behind their protocols. FX translation and automatic score/radar
-calculation remain unsupported and produce diagnostics.
+calculation remain unsupported. Missing audible behavior produces diagnostics;
+score/radar defaults are recorded in package reports.
 
 ## Chart conversion
 
@@ -218,7 +219,8 @@ come from KSON unless shared or per-chart jacket settings override the author.
 `ChartRadar` preserves six optional per-chart values; song and chart database
 controls accept explicit overrides validated against their XML integer types.
 Score and radar calculation are not implemented: unspecified radar values and
-maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
+maximum EX scores are zero, with defaulted fields recorded in package reports.
+The serializer writes a Shift-JIS
 `music_db.merged.xml` fragment with a fixed, attribute-free `<mdb>` root and
 rejects text that cannot be encoded. No reference database is required.
 

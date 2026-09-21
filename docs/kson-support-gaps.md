@@ -23,14 +23,13 @@ rendering the sound into the music, as described below.
 | `camera.cam.body.zoom_side` | Map this camera graph | `UNSUPPORTED_CAMERA` |
 | `camera.cam.pattern.laser.slam_event.swing` | Convert swing events and their `scale`, `repeat`, and `decay_order` parameters | `UNSUPPORTED_CAMERA` |
 | `camera.tilt`: `biggest`, `keep_normal`, `keep_biggest` | Map the remaining automatic tilt modes | `UNSUPPORTED_TILT_MODE` |
-| `audio.audio_effect.fx.def`, `audio.audio_effect.laser.def` | Implement authored effect definitions and parameters | `UNSUPPORTED_EFFECT_DEFINITION` |
-| `audio.audio_effect.fx.param_change`, `audio.audio_effect.laser.param_change` | Implement timed effect parameter changes | `UNSUPPORTED_EFFECT_EVENT` |
-| `audio.audio_effect.fx.long_event` | Implement FX hold effect invocations and overrides | `UNSUPPORTED_EFFECT_EVENT` |
-| `audio.audio_effect.laser.pulse_event` | Implement laser effect selection events | `UNSUPPORTED_EFFECT_EVENT` |
-| `audio.audio_effect.laser.peaking_filter_delay`, `audio.audio_effect.laser.legacy.filter_gain` | Implement filter delay and legacy gain behavior | `UNSUPPORTED_EFFECT_PARAMETER` |
-| `audio.key_sound.fx.chip_event` | Implement chip samples and per-event volume | `UNSUPPORTED_KEYSOUND` |
-| `audio.key_sound.laser.slam_event`, `.vol`, `.legacy.vol_auto` | Implement authored slam sounds and volume behavior | `UNSUPPORTED_KEYSOUND` |
-| `bg` | Map authored background behavior and resources | `UNSUPPORTED_SOURCE_FEATURE` |
+| `audio.audio_effect.fx.def`, `audio.audio_effect.laser.def` | Implement authored effect definitions and parameters | `AUDIO_RENDERING_REQUIRED` |
+| `audio.audio_effect.fx.param_change`, `audio.audio_effect.laser.param_change` | Implement timed effect parameter changes | `AUDIO_RENDERING_REQUIRED` |
+| `audio.audio_effect.fx.long_event` | Implement FX hold effect invocations and overrides | `AUDIO_RENDERING_REQUIRED` |
+| `audio.audio_effect.laser.pulse_event` | Implement laser effect selection events | `AUDIO_RENDERING_REQUIRED` |
+| `audio.audio_effect.laser.peaking_filter_delay`, `audio.audio_effect.laser.legacy.filter_gain` | Implement filter delay and legacy gain behavior | `AUDIO_RENDERING_REQUIRED` |
+| `audio.key_sound.fx.chip_event` | Implement chip samples and per-event volume | `AUDIO_RENDERING_REQUIRED` |
+| `audio.key_sound.laser.slam_event`, `.vol`, `.legacy.vol_auto` | Implement authored slam sounds and volume behavior | `AUDIO_RENDERING_REQUIRED` |
 | `gauge.total` | Map custom gauge behavior | `UNSUPPORTED_SOURCE_FEATURE` |
 | `impl` | Interpret applicable client-specific behavior | `UNSUPPORTED_SOURCE_FEATURE` |
 | Unknown optional members | Add explicit mappings where applicable | `UNKNOWN_EXTENSION` |
@@ -66,14 +65,17 @@ level consistency and renderer fidelity remain verification limits.
 | KSON field | Current limitation | Diagnostic |
 | --- | --- | --- |
 | `meta.title_translit`, `meta.artist_translit` | Retained without an automatic package metadata mapping | `UNSUPPORTED_PACKAGE_METADATA` |
-| `meta.information`, `meta.std_bpm` | Retained without a package output mapping | `UNSUPPORTED_PACKAGE_METADATA` |
-| `meta.title_img_filename`, `meta.artist_img_filename`, `meta.icon_filename` | Referenced resources are not included in the package | `UNSUPPORTED_PACKAGE_RESOURCE` |
+| `meta.std_bpm` | Retained without a package output mapping | `UNSUPPORTED_PACKAGE_METADATA` |
 | `audio.bgm.legacy.fp_filenames` | Alternate BGM resources are retained but not routed or packaged | `UNSUPPORTED_PACKAGE_RESOURCE` |
-| Unsupported audio and background resource references | Inventoried but not processed; supported switch-audio and chip-sample files are consumed by the audio workaround | `UNSUPPORTED_PACKAGE_RESOURCE` |
+| Unsupported audio resource references | Inventoried but not processed; supported switch-audio and chip-sample files are consumed by the audio workaround | `UNSUPPORTED_PACKAGE_RESOURCE` |
 
 Package omissions warn by default and fail strict package creation. A successful
 standalone chart conversion does not establish package support for these fields.
 Resource existence checks do not establish that a resource will be used.
+
+Backgrounds, title/artist images, icons and `meta.information` are intentionally
+excluded, not pending support. Their resources are not required by inspection
+or package creation, and they produce no warnings or strict-mode failures.
 
 ## Partial support and validation limits
 

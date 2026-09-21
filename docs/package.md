@@ -159,7 +159,7 @@ explicit image override.
 | `path` | Required | KSON file relative to the TOML directory |
 | `slot` | Required | `"novice"`, `"advanced"`, `"exhaust"`, `"infinite"`, `"maximum"` or `"ultimate"` |
 | `level_tenths` | KSON `meta.level` × 10 | Target difficulty, integer 1–255; 165 represents 16.5 |
-| `max_exscore` | `0` with a warning | Maximum EX score, integer 0–2147483647; not calculated from notes |
+| `max_exscore` | `0` | Maximum EX score, integer 0–2147483647; not calculated from notes |
 | `price` | `-1` | Target database control, signed 32-bit integer (−2147483648–2147483647) |
 | `limited` | `3` | Target database control, unsigned 8-bit integer (0–255) |
 | `jacket_print` | `-2` | Jacket print control, signed 32-bit integer |
@@ -177,9 +177,8 @@ field to keep its default.
 ### `[charts.radar]`
 
 This table belongs to the preceding `[[charts]]` entry. All six fields are optional
-integers from 0 to 65535; missing values become zero with a warning. Radar values
-are not calculated from notes. Supplying all six values suppresses that warning,
-including when the supplied values are zero.
+integers from 0 to 65535; missing values become zero. Radar values are not
+calculated from notes. The report lists defaults under `metadata.defaulted_fields`.
 
 | Configuration field | XML field |
 | --- | --- |
@@ -274,15 +273,17 @@ contains the assigned song ID under a fixed `<mdb>` root with no attributes.
 The schema-version-1 package report records chart conversion reports, source
 paths relative to the package root, per-difficulty rendering and audio
 measurements, separate preview measurements, diagnostics and written files.
-Uncomputed score/radar fields are reported.
+Defaulted score/radar fields are listed under `metadata.defaulted_fields`.
 
 ## Conversion limits and failures
 
 Custom laser-slam sounds, legacy alternate-BGM routing, unknown audio features,
 unmapped optional metadata and other unsupported resources remain explicit
 omissions. `--strict` rejects these omissions;
-supported chart approximations remain allowed. Warnings for uncomputed radar
-and unspecified maximum EX score remain allowed in strict mode.
+supported chart approximations remain allowed. Backgrounds, source title/artist
+images, icons and `meta.information` are intentionally ignored, including in
+strict mode. Their files are not required. Routine conversion details and
+optional score/radar defaults do not produce warnings.
 
 Automatic song grouping, replacing existing songs and automatic score/radar
 calculation are not implemented. Missing referenced

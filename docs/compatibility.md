@@ -153,7 +153,17 @@ its license notice is included in the distribution.
 Default conversion warns about omissions and emits the supported chart.
 `--strict` fails for unsupported features; supported sampling and camera
 approximations remain allowed. Invalid source data always fails. Unknown optional
-members are retained and diagnosed rather than silently discarded.
+members are retained and diagnosed except within intentionally ignored source
+presentation and annotation fields. Backgrounds, title/artist images, icons and
+`meta.information` are outside the output scope and do not fail strict mode.
+Inspection and package conversion do not require those resources.
+
+Routine camera mappings and sampling retain their feature status and counts
+without warning messages. Ambiguous or missing spin associations, unmapped
+motion, and unverified camera mappings still produce warnings. Standalone chart
+conversion summarizes authored effects and keysounds as one
+`AUDIO_RENDERING_REQUIRED` warning; successful package rendering replaces it
+with any remaining audio omissions.
 
 Preset names are recognized in fields that allow them when they have no extension,
 separator or drive prefix. File resources are resolved relative to each source
@@ -169,7 +179,7 @@ from `ksm2sdvx.chart`. The old root scripts and raw-dictionary API have no
 compatibility wrappers. Callers must supply required KSON metadata and handle
 typed results. Parsing rejects nulls, fractional pulses, boolean numeric values,
 negative durations, nonfinite numbers, invalid ordering and prohibited overlaps.
-A UTF-8 BOM is accepted with a diagnostic.
+A UTF-8 BOM is accepted without a warning.
 `meta.disp_bpm` may be omitted or empty; supplied text is retained as display
 metadata. VOX timing and package BPM ranges use the actual `beat.bpm` events.
 
@@ -200,7 +210,7 @@ validation before serialization.
 | Metadata | New entry from selected charts and explicit target defaults, encoded as CP932 XML | Text outside that encoding is rejected; no existing song entry is used as a template |
 | IDs | Explicit ordinary song ID, 1–3071 for the supported target | User chooses the ID and manages conflicts with the game and installed mods |
 | Package output | New `data_mods/<name>` directory with charts, media, selector artwork and XML fragment | No song replacement or automatic grouping; destination must be new |
-| Score and radar | Explicit maximum EX score and six per-chart radar values accepted; unspecified values become zero with warnings | Automatic calculation is not implemented |
+| Score and radar | Explicit maximum EX score and six per-chart radar values accepted; unspecified values become zero and are listed in the package report | Automatic calculation is not implemented |
 
 Jacket override precedence is per-chart settings → shared settings → KSON for
 source/author. `[charts.jacket]` belongs to the preceding
@@ -210,12 +220,15 @@ version or template selector.
 
 The `audio` and `jacket` commands expose the same processors independently. See
 [media commands](media.md) for all arguments. Peak limits apply before lossy
-encoding; decoded output peaks are measured and overshoots are reported.
+encoding; decoded output peaks are measured. A warning is emitted for more than
+0.5 dB of ceiling overshoot or any decoded peak at or above 0 dBTP. A loudness
+shortfall greater than 1 LU also produces a warning. These thresholds affect
+diagnostics only; normalization settings and audio processing are unchanged.
 
 Package creation renders supported FX and chip keysounds. Custom slam sounds,
 legacy alternate-BGM routing, unknown audio features, unmapped optional metadata
 and other unsupported resources remain diagnosed. `--strict` rejects those omissions, while supported
-approximations and the score/radar warnings remain allowed. Invalid resources,
+approximations and score/radar defaults remain allowed. Invalid required resources,
 timing and configuration fail in either mode.
 
 ## Inspection and reports
