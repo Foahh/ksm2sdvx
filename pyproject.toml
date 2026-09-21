@@ -1,6 +1,6 @@
 [build-system]
-requires = ["uv_build>=0.11.13,<0.12"]
-build-backend = "uv_build"
+requires = ["scikit-build-core>=1.0.3,<1.1"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "ksm2sdvx"
@@ -16,6 +16,34 @@ ksm2sdvx = "ksm2sdvx.cli:main"
 
 [dependency-groups]
 dev = ["hypothesis", "pyright", "pytest", "pytest-cov", "ruff"]
+
+[tool.scikit-build]
+minimum-version = "1.0"
+wheel.packages = ["src/ksm2sdvx"]
+wheel.py-api = "py3"
+build-dir = "build/{wheel_tag}"
+sdist.inclusion-mode = "explicit"
+sdist.include = [
+    "/pyproject.toml", "/CMakeLists.txt", "/README.md", "/.python-version", "/uv.lock",
+    "/LICENSES/**", "/src/**", "/native/**", "/tests/**", "/docs/*.md", "/examples/**",
+    "/external/ksm-v2/LICENSE",
+    "/external/ksm-v2/ksmaudio/CMakeLists.txt",
+    "/external/ksm-v2/ksmaudio/include/**",
+    "/external/ksm-v2/ksmaudio/src/AudioEffect/**",
+    "/external/ksm-v2/ksmaudio/src/StreamWithEffects.cpp",
+    "/external/ksm-v2/ksmaudio/src/Stream.cpp",
+    "/external/ksm-v2/ksmaudio/src/Sample.cpp",
+    "/external/ksm-v2/ksmaudio/src/ksmaudio.cpp",
+    "/external/ksm-v2/ksmaudio/ThirdParty_Windows/**",
+    "/external/ksm-v2/ksmaudio/THIRD_PARTY_LICENSE.txt",
+    "/external/ksm-v2/kson/LICENSE",
+    "/external/ksm-v2/kson/include/kson/third_party/nlohmann/json.hpp",
+    "/external/ksm-v2/kshootmania/App/se/note/*.wav",
+]
+sdist.exclude = ["**/__pycache__/**", "**/*.pyc", "/docs/analysis/**", "/.cache/**", "/build/**"]
+
+[tool.scikit-build.cmake.define]
+BUILD_TESTING = "OFF"
 
 [tool.pyright]
 include = ["src", "tests"]

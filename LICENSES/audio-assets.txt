@@ -1,0 +1,18 @@
+Bundled audio dependencies and assets
+
+K-Shoot MANIA v2: https://github.com/kshootmania/ksm-v2
+ksmaudio: https://github.com/kshootmania/ksmaudio
+BASS and BASS FX: https://www.un4seen.com/
+
+The five KSM preset WAV samples are excluded from KSM's MIT license.
+Local builds include these assets from the pinned upstream checkout. Public
+redistribution requires separate permission from the relevant rights holders.
+Their presence in the upstream repository does not grant an MIT license to them.
+
+BASS is free for non-commercial use under its own terms; commercial use requires
+the appropriate license. BASS FX and its dependencies retain their own license
+and attribution requirements. The installed renderer includes the upstream
+third-party notices in its licenses directory.
+
+KSM's source license does not replace the licenses of nested dependencies.
+Establish ksmaudio source redistribution rights before publishing binaries.

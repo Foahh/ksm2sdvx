@@ -1,0 +1,3 @@
+[submodule "external/ksm-v2"]
+	path = external/ksm-v2
+	url = https://github.com/kshootmania/ksm-v2.git
