@@ -1,7 +1,10 @@
 # Conversion compatibility
 
-The `vox13` profile converts KSON format version 1 to VOX v13.
-The table below lists the behavior implemented by this package.
+The `vox13` profile converts KSON format version 1 to VOX v13. Chart conversion
+is used by `chart`, `inspect` and `package`. Audio, jacket and package processing
+have additional behavior described below.
+
+## Chart conversion
 
 | Feature | Behavior |
 | --- | --- |
@@ -18,7 +21,7 @@ The table below lists the behavior implemented by this package.
 | Stops and nondefault scroll speed | Preserved with unsupported-feature diagnostics |
 | Effect definitions, automation, invocations | Preserved; translation deferred and omissions diagnosed |
 | Keysounds | Configuration/resources retained; audible behavior is not converted |
-| Metadata, BGM and artwork references | Deferred package data; do not fail strict chart conversion |
+| Metadata, BGM and artwork references | Preserved for package processing; their absence from VOX text does not fail strict chart conversion |
 | Background behavior, gauge, client extensions | Retained; unsupported behavior diagnosed |
 | Editor and compatibility annotations | Retained as deferred source data |
 
@@ -56,37 +59,68 @@ members are retained and diagnosed rather than silently discarded.
 
 Preset names are recognized in fields that allow them when they have no extension,
 separator or drive prefix. File resources are resolved relative to each source
-chart and must remain in the package root. Inspection verifies file existence; media
-decoding and target-format suitability require processing implementations.
+chart and must remain in the package root. Inspection verifies file existence;
+the implemented media processors decode and validate files during conversion.
+Package creation uses the TOML file's directory as that root; inspection takes
+its root explicitly through `--root`.
 
-## Breaking migration
+## Typed APIs and source validation
 
-The root script invocation, raw-dictionary API and old JSON report are removed.
-Use the installed CLI or `load_kson`/`parse_kson` → `convert_chart` → `serialize_vox`.
-Existing callers must supply required metadata and handle the new typed results.
-Generated headers now name `ksm2sdvx`. End markers now include supported timing
-and mode events that occur after the last note. Separate manual tilt sequences
+Use the installed CLI or `load_kson`/`parse_kson` → `convert_chart` → `serialize_vox`
+from `ksm2sdvx.chart`. The old root scripts and raw-dictionary API have no
+compatibility wrappers. Callers must supply required KSON metadata and handle
+typed results. Parsing rejects nulls, fractional pulses, boolean numeric values,
+negative durations, nonfinite numbers, invalid ordering and prohibited overlaps.
+A UTF-8 BOM is accepted with a diagnostic.
+
+Generated headers name `ksm2sdvx`. End markers include supported timing and mode
+events that occur after the last note. Separate manual tilt sequences
 restart their node encoding instead of sharing one sequence across automatic
 intervals.
 
-The VOX model now distinguishes `VoxBtNote`, `VoxFxChip`, and `VoxFxHold` instead
-of the former generic button row. Laser fields identify the effect selector and
+The VOX model distinguishes `VoxBtNote`, `VoxFxChip`, and `VoxFxHold`.
+Laser fields identify the effect selector and
 the separate v13 C8 field. `Realize` keeps explicit C3–C7 values. Direct target
-construction must supply the three complete effect tables. No aliases preserve
-the earlier incomplete target API.
+construction must supply the three complete effect tables and pass target
+validation before serialization.
 
-## Package and API names
+## Media and package conversion
 
-Install `ksm2sdvx` and import chart operations from `ksm2sdvx.chart`. Package
-inspection is available through `ksm2sdvx.pipeline.inspect_package` and the
-`ksm2sdvx inspect` command. The earlier package, command, root exports, and package
-operation names have been removed without aliases.
+| Component | Implemented behavior | Limits |
+| --- | --- | --- |
+| Audio | ASF/WMA Professional, stereo 44.1 kHz, approximately 384 kb/s; default −11 LUFS through constant gain | Windows encoder required; peak headroom can prevent reaching the requested loudness |
+| Audio timing | Positive KSON offset trims, negative pads silence; previews use original audio coordinates | All charts in a package must share the music file, offset, volume and preview timing |
+| Jackets | 8-bit RGB PNG, 108/128/300/676 pixels square; always contain with black margins | Symbolic presets need an explicit file override; transparent pixels composite onto black |
+| Artwork credits | KSON `meta.jacket_author`; shared and per-chart `jacket.author` overrides | No separate chart-level credit setting |
+| Metadata | New entry from selected charts and explicit target defaults, encoded as CP932 XML | Text outside that encoding is rejected; no existing song entry is used as a template |
+| IDs | Explicit unused ID, 1–32767; 10001+ recommended | Checks the reference database, not other installed mods |
+| Package output | New `data_mods/<name>` directory with charts, media, selector artwork and XML fragment | No song replacement or automatic grouping; destination must be new |
+| Score and radar | Explicit maximum EX score and six per-chart radar values accepted; unspecified values become zero with warnings | Automatic calculation is not implemented |
+
+Jacket override precedence is per-chart settings → shared settings → KSON for
+source/author. `[charts.jacket]` belongs to the preceding
+`[[charts]]` entry. See the [complete configuration](package.md#complete-configuration-reference)
+for all fields, defaults and allowed values. There is no configuration schema
+version or template selector.
+
+The `audio` and `jacket` commands expose the same processors independently. See
+[media commands](media.md) for all arguments. Peak limits apply before lossy
+encoding; decoded output peaks are measured and overshoots are reported.
+
+Package creation diagnoses FX, keysounds, unmapped optional metadata and other
+unsupported resources. `--strict` rejects those source omissions, while supported
+approximations and the score/radar warnings remain allowed. Invalid resources,
+timing and configuration fail in either mode.
+
+## Inspection and reports
+
+`ksm2sdvx.pipeline.inspect_package` and `ksm2sdvx inspect` convert charts in memory
+and inventory resources without writing files. Inspection preserves per-chart
+metadata and audio offsets. It does not infer songs or verify media encoding.
 
 Inspection JSON uses schema version 2. It contains `schema_version`, `valid`,
 `root`, `charts`, `assets`, and `diagnostics`; resource uses identify their owning
-`source` file. The fixed deferred-operations list has been removed, and resource
-diagnostics use the `inspect` stage. Chart reports retain schema version 1.
-
-Chart output behavior is unchanged by this package migration apart from the
-generated project-name header. Music, jacket, metadata conversion, and package
-writing expose interfaces only and have no executable commands.
+`source` file. Resource diagnostics use the `inspect` stage. Chart and package
+reports use schema version 1. Package reports include chart reports, relative
+source paths, audio measurements, diagnostics and the output file inventory.
+Report schema versions are independent of the unversioned TOML configuration.

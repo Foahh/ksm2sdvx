@@ -1,6 +1,7 @@
 # Architecture
 
-`ksm2sdvx` is one installable project. Its components separate chart conversion,
+`ksm2sdvx` is one installable Python 3.14+ project, with one distribution,
+`pyproject.toml`, uv lockfile and command. Its components separate chart conversion,
 media processing, metadata conversion, resource discovery, and package output.
 The pipeline composes components. Components do not import the pipeline, and
 shared modules do not import components. CLI modules handle arguments and
@@ -17,14 +18,51 @@ src/ksm2sdvx/
     cli.py          chart arguments and presentation
     types.py        pulses, durations, measures, ticks
     errors.py       chart decoding, validation, conversion failures
-  music/            audio processing models and interfaces
-  jacket/           artwork processing models and interfaces
-  metadata/         per-chart metadata and target conversion interface
-  resources/        neutral references, discovery, containment, deduplication
-  pipeline/         package inspection, composition models, writer interface
-  common/           diagnostics, errors, milliseconds, immutable JSON values
+  music/
+    models.py       audio settings, measurements, requests and results
+    interfaces.py   MusicProcessor and S3vEncoder protocols
+    processor.py    FFmpeg analysis, timing, constant gain and verification
+    _windows.py     Windows WMA Professional encoding
+    application.py  standalone audio file conversion
+    cli.py          audio arguments and presentation
+    errors.py       audio processing failures
+  jacket/
+    models.py       sizes, requests and results
+    interfaces.py   JacketProcessor protocol
+    processor.py    FFmpeg image processing and PNG validation
+    application.py  standalone jacket file conversion
+    cli.py          jacket arguments and presentation
+    errors.py       image processing failures
+  metadata/
+    models.py       source metadata, slot assignments and SDVX metadata
+    interfaces.py   MetadataConverter protocol
+    database.py     immutable XML records and reference database loading
+    converter.py    new-song metadata conversion and XML serialization
+    errors.py       metadata validation and encoding failures
+  resources/
+    models.py       neutral references, uses, inventory and processed files
+    discovery.py    resolution, containment and deduplication
+    errors.py       resource resolution failures
+  pipeline/
+    config.py       TOML loading and package configuration models
+    models.py       inspection, composed package and output records
+    inspection.py  read-only chart conversion and resource inventory
+    report.py      inspection JSON serialization
+    build.py       chart, metadata, music and jacket composition
+    interfaces.py  PackageWriter protocol
+    writer.py      staged LayeredFS directory output
+    errors.py      package configuration and composition failures
+  common/
+    diagnostics.py diagnostic records, stages and severity
+    errors.py      Ksm2SdvxError and general output failures
+    types.py       milliseconds and immutable JSON values
+    cli.py         diagnostic presentation shared by CLI adapters
   cli.py            command dispatch and expected-error presentation
+  __main__.py       python -m ksm2sdvx
+  py.typed          installed typing marker
 ```
+
+All packages have ordinary `__init__.py` files. Tests live outside `src/`.
 
 Public APIs live in their owning subpackages. The package root imports no
 components. Models use frozen, slotted dataclasses and tuple collections;
@@ -38,14 +76,25 @@ no application filesystem work and initialize no media processors.
 | Chart | KSON parsing, conversion, VOX serialization, chart file output | Implemented |
 | Resources | Resolve references and inventory shared files and presets | Implemented |
 | Package inspection | Validate selected charts and inventory their resources | Implemented, read-only |
-| Music | Produce audio files from explicit requests and settings | Models and `MusicProcessor` protocol |
-| Jacket | Produce artwork files from explicit requests and settings | Models and `JacketProcessor` protocol |
-| Metadata | Convert per-chart metadata into a target representation | Models and `MetadataConverter` protocol |
-| Package output | Write composed charts, metadata, and processed resources | Models and `PackageWriter` protocol |
+| Music | Measure loudness, normalize audio, encode music and previews | FFmpeg and Windows WMA Professional implementation; `MusicProcessor` and `S3vEncoder` protocols |
+| Jacket | Produce standard, small, large and selector jackets | FFmpeg implementation; `JacketProcessor` protocol |
+| Metadata | Produce a new song entry from source values and target defaults | Shift-JIS XML adapter; `MetadataConverter` protocol |
+| Package output | Write composed charts, metadata, and processed resources | Staged LayeredFS directory writer; `PackageWriter` protocol |
 
-The installed command exposes `chart` and `inspect`. Interface-only components
-have no command, registered implementation, or fallback that reports success.
-No complete-package conversion coordinator is included.
+The installed command exposes `chart`, `audio`, `jacket`, `inspect` and `package`.
+The package command adds one explicitly grouped song. It requires FFmpeg,
+FFprobe and the Windows Media Format runtime; chart conversion, inspection and
+jacket processing remain portable. See the [command reference](cli.md) and
+[package creation](package.md) for configuration and output.
+
+`music.application.convert_audio_file` and `jacket.application.convert_jacket_file`
+accept standalone source and output paths. Their component CLI modules handle
+arguments and presentation, using the same processors as package creation.
+See [media commands](media.md) for options and defaults.
+
+Media processing, metadata conversion and package writing have concrete
+implementations behind their protocols. FX translation and automatic score/radar
+calculation remain unsupported and produce diagnostics.
 
 ## Chart boundary
 
@@ -75,6 +124,8 @@ changes, and tilt modes. Conversion behavior is detailed in
 
 `chart.application.convert_chart_file` combines loading, conversion, report
 assembly, and file output. The pure chart API remains available independently.
+Typed curve fitting utilities remain internal to `chart.geometry`, separate from
+the forward chart conversion passes.
 
 ## Resources and inspection
 
@@ -107,17 +158,55 @@ schema. Inspection never creates output directories or writes files.
 resource, explicit destination, and typed settings. Their processors return a
 `ProcessedResource` and diagnostics after producing an output, or raise an
 expected error. Processed references retain the source uses they satisfy.
-Settings are generic; the contracts prescribe no codec or image dimensions.
+The generic contracts allow other implementations. Concrete settings specify
+the WMA Professional audio format and supported RGB PNG jacket sizes.
 
 `PackageMetadata` contains a separate `ChartMetadata` record for each chart,
 including audio offsets and preview timing. There is no implicit selection of
 song-wide values. `MetadataConverter[SettingsT, TargetT]` returns a typed target
 payload and diagnostics. Target metadata schemas belong to concrete adapters.
 
-`SdvxPackage[MetadataT]` composes named VOX charts, target metadata, and processed
-resource references. `PackageWriter[MetadataT]` accepts this model and an explicit
-destination, returning the files actually written and diagnostics. These models
-and protocols perform no conversion or publication themselves.
+`SdvxPackage[MetadataT]` composes named VOX charts, target metadata, and
+`PackageResource` records assigning processed files to relative output paths.
+`PackageWriter[MetadataT]` accepts this model and an explicit destination,
+returning the files actually written and diagnostics.
+
+`build_package` loads the selected charts, validates resource references, converts
+metadata, and processes music and jackets in a temporary workspace. Charts must
+share their music file, offset, source volume and preview timing. Explicit target
+slots determine output names; filenames do not determine song grouping.
+
+`PackageConfig` contains explicit chart bindings plus music, metadata and jacket
+settings. Its `name` supplies the mod directory name, resource filename suffix
+and target database `ascii` value. Its source root is derived from the TOML file's
+directory; chart and jacket override paths resolve from that directory.
+`JacketConfig` is shared by song-wide and per-chart overrides, with each field
+resolved independently. The TOML configuration has no schema-version
+selector. CLI conversion options remain separate `ConversionOptions` inputs.
+The [complete configuration reference](package.md#complete-configuration-reference)
+documents all accepted fields and their defaults.
+
+`SdvxMetadataConverter` builds a new ID from chart levels, authors, title, artist,
+BPM and resource names. It checks the reference database for ID collisions,
+disables unselected slots, and emits explicit target defaults. Jacket credits
+come from KSON unless shared or per-chart jacket settings override the author.
+`ChartRadar` preserves six optional per-chart values; song and chart database
+controls accept explicit overrides validated against their XML integer types.
+Score and radar calculation are not implemented: unspecified radar values and
+maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
+`music_db.merged.xml` fragment and rejects text that cannot be encoded.
+
+`FfmpegMusicProcessor.process_song` selects one constant gain using the full
+track's loudness and both full-track and preview peak headroom. The default target
+is −11 LUFS. Standalone `process` converts one requested interval. The Windows
+encoder produces WMA Professional audio; there is no alternate-codec fallback.
+`FfmpegJacketProcessor` produces RGB PNGs at the four supported sizes, always
+preserving the full image's aspect ratio with black margins (contain).
+
+`LayeredFsPackageWriter` checks relative paths and collisions, stages charts,
+processed assets, metadata and a report, then publishes a new mod directory.
+The caller must choose an unused destination. Source assets and the reference
+database are never modified. Concurrent writers must use distinct destinations.
 
 FX event translation belongs to chart conversion. Audio rendering belongs to the
 music component. Source effect information remains available for both boundaries;
@@ -125,11 +214,11 @@ the current chart converter diagnoses untranslated audible behavior.
 
 ## Errors and output
 
-Expected errors derive from `Ksm2SdvxError`. Chart and resource errors belong to
-their components; general output errors are shared. Unexpected programming errors
-are not caught as ordinary input failures. Diagnostics carry stable codes,
-severity, stage, feature, source location, and optional integer pulse. Shared
-diagnostics do not depend on chart-specific types.
+Expected errors derive from `Ksm2SdvxError`. Chart, music, jacket, metadata,
+resource and package errors belong to their components; output errors are shared.
+Unexpected programming errors are not caught as ordinary input failures.
+Diagnostics carry stable codes, severity, stage, feature, source location, and
+optional integer pulse. Shared diagnostics do not depend on chart-specific types.
 
 Chart output stages VOX and report files before replacing either. Each replacement
 is atomic; the pair is not a filesystem transaction. Failure of the second
@@ -141,4 +230,6 @@ Synthetic golden fixtures and typed-model tests cover chart behavior. Inspection
 tests check resource handling and filesystem contents before and after execution.
 CLI integration tests cover command options, exit codes, and file output. Local
 verification includes lint, formatting, strict type checking, tests, and package
-builds.
+builds. Media tests use generated images and audio, with real FFmpeg processing
+when available. WMA Professional encoding tests require Windows; tests never
+depend on an installed game or private reference assets.

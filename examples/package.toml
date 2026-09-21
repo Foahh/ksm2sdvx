@@ -1,0 +1,60 @@
+# Configure one song. Place this file alongside your charts and media.
+# Chart and jacket paths are relative to this file's directory.
+# Remove the leading # from an optional setting to override its default.
+# Build: uv run ksm2sdvx package package.toml --game-data reference/data
+
+name = "my_song" # Folder and resource names; use letters, digits, _ or -.
+song_id = 10001 # Choose an unused ID; 10001+ recommended, maximum 32767.
+
+[metadata]
+# Title and artist come from KSON unless overridden here.
+# title = "Song title"
+# artist = "Song artist"
+# Optional readings; default to the title and artist above or from KSON.
+# title_yomigana = "SONG TITLE"
+# artist_yomigana = "SONG ARTIST"
+# volume = 91 # Default game playback volume; separate from audio normalization.
+# version = 7 # Default game version recorded for this song.
+# distribution_date = 20260101 # YYYYMMDD; default: build date.
+# license_text = "License or copyright credit" # Omitted by default.
+# Other database controls; defaults shown except inf_ver, which is automatic.
+# bg_no = 2
+# genre = 0
+# is_fixed = 1
+# demo_pri = 0
+# inf_ver = 0 # Default: 2 with an infinite chart, otherwise 0.
+
+[music]
+# target_lufs = -11 # Default loudness target in LUFS; lower values are quieter.
+# true_peak_dbtp = -1.0 # Default peak limit in dBTP before encoding.
+
+[jacket]
+# Shared artwork and credit; defaults come from each KSON file.
+# Images keep their proportions, with black margins when needed.
+# source = "jacket.png"
+# author = "Artwork author"
+
+# Repeat [[charts]] and its nested sections for each difficulty.
+[[charts]]
+path = "hard.kson"
+slot = "exhaust" # novice, advanced, exhaust, infinite, maximum, ultimate
+# level_tenths = 165 # 165 means level 16.5; default: KSON level × 10.
+# max_exscore = 4000 # Example only; supply the actual score. Not calculated.
+# price = -1 # Default database price control.
+# limited = 3 # Default database availability control.
+# jacket_print = -2 # Default jacket print control.
+# jacket_mask = 0 # Default jacket mask control.
+
+[charts.radar]
+# Not calculated: missing values become 0 with a warning. Range: 0–65535.
+# notes = 0
+# peak = 0
+# tsumami = 0
+# tricky = 0
+# hand_trip = 0
+# one_hand = 0
+
+[charts.jacket]
+# Override shared artwork or credit for this chart only; otherwise inherited.
+# source = "hard-jacket.png"
+# author = "Chart artwork author"
