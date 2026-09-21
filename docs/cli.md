@@ -5,6 +5,7 @@ One installed command exposes all implemented components:
 ```text
 uv run ksm2sdvx chart SOURCE [-o OUTPUT] [conversion options]
 uv run ksm2sdvx audio SOURCE [-o OUTPUT] [audio options]
+uv run ksm2sdvx audio --chart CHART.kson [-o OUTPUT] [--strict] [audio options]
 uv run ksm2sdvx jacket SOURCE [-o OUTPUT] [jacket options]
 uv run ksm2sdvx inspect SOURCE... --root ROOT [conversion options]
 uv run ksm2sdvx package MANIFEST --game-data DATA [-o OUTPUT] [package options]
@@ -87,5 +88,6 @@ are not disguised as input failures.
 
 Chart reports use schema version 1, inspection JSON uses version 2, and package
 reports use version 1. These versions describe generated JSON, not the TOML
-configuration. Standalone audio and jacket commands print their results and
-diagnostics without writing an adjacent JSON report.
+configuration. Chart audio rendering (`audio --chart`) writes an adjacent
+version 1 report. Raw audio and jacket commands print results and diagnostics
+without writing an adjacent JSON report.

@@ -17,12 +17,12 @@ have additional behavior described below.
 | Manual tilt | Fixed angular conversion, continuous winding and equivalent instantaneous orientations |
 | Normal, bigger, keep_bigger tilt | Converted to existing VOX mode codes |
 | Other auto tilt modes, including zero | Explicit unsupported-feature diagnostics |
-| Spins and half-spins | Attached to matching slams; duration mapping, fallback and ambiguity are reported |
+| Spins and half-spins | Positive durations attach to matching slams; zero-duration events emit no roll and are reported as no-ops |
 | Swing and other camera body controls | Preserved with unsupported-feature diagnostics |
 | Scroll speed, including negative values | Converted to signed ManualSpeed updates; linear and curved ramps are sampled |
 | Stops (`beat.stop`) | Preserved with unsupported-feature diagnostics |
-| Effect definitions, automation, invocations | Preserved; translation deferred and omissions diagnosed |
-| Keysounds | Configuration/resources retained; audible behavior is not converted |
+| Effect definitions, automation, invocations | Preserved; standalone chart output diagnoses absent audio rendering |
+| Keysounds | Preserved; package creation renders supported chip samples |
 | Metadata, BGM and artwork references | Preserved for package processing; their absence from VOX text does not fail strict chart conversion |
 | Background behavior, gauge, client extensions | Retained; unsupported behavior diagnosed |
 | Editor and compatibility annotations | Retained as deferred source data |
@@ -36,7 +36,10 @@ Source anchors and jumps are preserved; analytical curve controls are not writte
 The converter writes five laser effect definitions, twelve no-effect FX pairs,
 and twenty-four disabled parameter assignments. FX holds reference pair `2`
 (the first pair); FX chips use sample `0`. These tables complete the VOX structure;
-translation of authored KSON effects remains unsupported and diagnosed.
+standalone chart conversion diagnoses authored audio it cannot produce.
+Package creation bakes supported effects into each difficulty's music, disables
+native FX and laser processing, and uses sample `255` for rendered gold FX chips.
+Ordinary silent chips retain sample `0`.
 
 The target model supports explicit beat resolution, BPM pause flags and options,
 effect definitions and modulation, optional chain counts, post-effects, scripts,
@@ -114,6 +117,8 @@ compatibility wrappers. Callers must supply required KSON metadata and handle
 typed results. Parsing rejects nulls, fractional pulses, boolean numeric values,
 negative durations, nonfinite numbers, invalid ordering and prohibited overlaps.
 A UTF-8 BOM is accepted with a diagnostic.
+`meta.disp_bpm` may be omitted or empty; supplied text is retained as display
+metadata. VOX timing and package BPM ranges use the actual `beat.bpm` events.
 
 Generated headers name `ksm2sdvx`. End markers include supported timing and mode
 events that occur after the last note. Separate manual tilt sequences
@@ -131,6 +136,8 @@ validation before serialization.
 | Component | Implemented behavior | Limits |
 | --- | --- | --- |
 | Audio | ASF/WMA Professional, stereo 44.1 kHz, approximately 384 kb/s; default −11 LUFS through constant gain | Windows encoder required; peak headroom can prevent reaching the requested loudness |
+| Chart audio | ksmaudio DSP effects, laser filters, switch-audio routing, file and built-in chip keysounds | Windows x64 renderer; custom slam sounds and legacy alternate-BGM routing are diagnosed |
+| Gameplay and preview | Each difficulty has separately rendered and normalized audio; preview comes from the original track | Baked effects are independent of player input; arcade slam feedback remains enabled |
 | Audio timing | Positive KSON offset trims, negative pads silence; previews use original audio coordinates | All charts in a package must share the music file, offset, volume and preview timing |
 | Jackets | 8-bit RGB PNG, 108/128/300/676 pixels square; always contain with black margins | Symbolic presets need an explicit file override; transparent pixels composite onto black |
 | Artwork credits | KSON `meta.jacket_author`; shared and per-chart `jacket.author` overrides | No separate chart-level credit setting |
@@ -149,8 +156,9 @@ The `audio` and `jacket` commands expose the same processors independently. See
 [media commands](media.md) for all arguments. Peak limits apply before lossy
 encoding; decoded output peaks are measured and overshoots are reported.
 
-Package creation diagnoses FX, keysounds, unmapped optional metadata and other
-unsupported resources. `--strict` rejects those source omissions, while supported
+Package creation renders supported FX and chip keysounds. Custom slam sounds,
+legacy alternate-BGM routing, unknown audio features, unmapped optional metadata
+and other unsupported resources remain diagnosed. `--strict` rejects those omissions, while supported
 approximations and the score/radar warnings remain allowed. Invalid resources,
 timing and configuration fail in either mode.
 

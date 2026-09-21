@@ -112,7 +112,7 @@ than TOML overrides:
 | --- | --- | --- |
 | `audio.bgm.filename` | Required for package creation | Shared music file |
 | `audio.bgm.offset` | `0` ms | Positive trims the start; negative pads silence |
-| `audio.bgm.vol` | `1` | Positive amplitude multiplier applied to the loudness target |
+| `audio.bgm.vol` | `1` | BGM level relative to keysounds, applied before normalizing the rendered mix |
 | `audio.bgm.preview.offset` | `0` ms | Nonnegative start time in the original audio |
 | `audio.bgm.preview.duration` | `15000` ms | Positive preview duration |
 
@@ -176,15 +176,23 @@ Music and previews use ASF containers with WMA Professional audio and a 32-byte
 `S3V0` footer required for game playback, stereo at 44.1 kHz and approximately
 384 kb/s. Positive KSON offsets trim the beginning;
 negative offsets add silence. Preview intervals refer to the original audio
-file. Package creation chooses one gain from the full track's integrated loudness
-and the peak headroom of both the full track and preview.
+file. Each difficulty has its own rendered effects and keysounds, and receives
+its own normalization gain. Preview gain is based on the original full-track
+loudness and constrained by preview peak headroom.
 
 The default loudness target is **−11 LUFS**, configurable through
 `music.target_lufs`. FFmpeg measures integrated loudness and true peak; a constant
 `volume` filter applies the smaller of the required loudness gain and available
-peak headroom. It does not compress the signal's dynamics. KSON source volume
-scales the loudness target. Silent audio and nonpositive source volume are
-rejected because normalization cannot determine a finite gain.
+peak headroom. It does not compress the signal's dynamics. KSON BGM volume sets
+its level relative to chip samples before normalization. A silent rendered mix
+cannot be normalized and fails with an audio error.
+
+Effects are baked into gameplay music and do not depend on player input. The
+matching VOX chart disables native FX and laser filtering to avoid applying the
+effects twice. Rendered keysounded FX chips retain their gold appearance using
+sample 255. Arcade laser-slam feedback remains enabled. The Windows x64 package
+includes the audio renderer, BASS libraries, and five KSM chip presets; no KSM
+installation or runtime setup is required.
 
 `music.true_peak_dbtp` defaults to **−1 dBTP** and limits the signal before
 encoding. Lossy encoding can raise the decoded peak; the processor measures the
@@ -218,7 +226,7 @@ my_song/
   others/music_db.merged.xml
   music/3000_my_song/
     3000_my_song_3e.vox
-    3000_my_song.s3v
+    3000_my_song_3e.s3v
     3000_my_song_pre.s3v
     jk_3000_3.png
     jk_3000_3_s.png
@@ -232,18 +240,20 @@ Selector images extend the existing `s_jacket00.ifs`; no copied game archive is
 included. The XML fragment adds a new entry rather than duplicating an existing ID.
 
 The schema-version-1 package report records chart conversion reports, source
-paths relative to the package root, audio measurements, diagnostics and written
-files. Uncomputed score/radar fields are reported.
+paths relative to the package root, per-difficulty rendering and audio
+measurements, separate preview measurements, diagnostics and written files.
+Uncomputed score/radar fields are reported.
 
 ## Conversion limits and failures
 
-FX translation, keysounds, unmapped optional metadata and other unsupported
-resources remain explicit omissions. `--strict` rejects these omissions;
+Custom laser-slam sounds, legacy alternate-BGM routing, unknown audio features,
+unmapped optional metadata and other unsupported resources remain explicit
+omissions. `--strict` rejects these omissions;
 supported chart approximations remain allowed. Warnings for uncomputed radar
 and unspecified maximum EX score remain allowed in strict mode.
 
-Per-difficulty audio selection, automatic song grouping, replacing existing songs
-and automatic score/radar calculation are not implemented. Missing referenced
+Automatic song grouping, replacing existing songs and automatic score/radar
+calculation are not implemented. Missing referenced
 files, references outside the source root, invalid source/configuration data,
 unrepresentable chart timing and ID/output collisions fail in either mode.
 

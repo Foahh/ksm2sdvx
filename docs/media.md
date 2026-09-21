@@ -13,6 +13,7 @@ chart/package commands.
 uv run ksm2sdvx audio music.ogg -o output/music.s3v
 uv run ksm2sdvx audio music.ogg --target-lufs -11 --offset-ms 120
 uv run ksm2sdvx audio music.ogg --preview-start-ms 30000 --preview-duration-ms 15000
+uv run ksm2sdvx audio --chart song/hard.kson --strict
 ```
 
 Output is ASF with WMA Professional audio and a required 32-byte `S3V0` footer,
@@ -21,7 +22,9 @@ stereo at 44.1 kHz and approximately 384 kb/s. The default path is
 
 | Argument or option | Default | Behavior and constraints |
 | --- | --- | --- |
-| `SOURCE` | Required | Audio file decodable by FFmpeg |
+| `SOURCE` | Required without `--chart` | Audio file decodable by FFmpeg |
+| `--chart PATH` | None | Render effects and keysounds from a KSON chart instead of supplying `SOURCE` |
+| `--strict` | Off | With `--chart`, reject omitted audio features |
 | `-o PATH`, `--output PATH` | Path above | Select the `.s3v` file |
 | `--target-lufs NUMBER` | `-11` | Integrated loudness target, finite number from −70 to 0 LUFS |
 | `--true-peak-dbtp NUMBER` | `-1` | Peak ceiling before encoding, finite number from −20 to 0 dBTP |
@@ -37,10 +40,36 @@ Normalization applies a constant volume gain limited by the available peak
 headroom. The command prints the applied gain and measured output loudness when
 available. Lossy encoding can raise the decoded peak; any overshoot is reported.
 An independent preview uses its own measured loudness unless `--gain-db` is
-supplied. Package creation chooses a shared gain for the full track and preview.
+supplied. Package creation normalizes each rendered difficulty independently;
+its preview uses the original full-track loudness and the preview's peak headroom.
 An explicit gain that exceeds peak headroom fails; it is not silently reduced.
 Silent audio and intervals too short for the required measurement fail with an
 audio error. Supplying a gain for a short preview requires only a peak measurement.
+
+### Chart audio
+
+`--chart` reads the music reference, offset, relative volume, effect definitions,
+automation, laser graphs and chip keysounds from KSON. Its output is
+`output/<chart-stem>.s3v` plus an adjacent `.report.json`, unless `-o` selects a
+different file. The report records rendered features, dependency versions,
+normalization and omissions. Raw-audio offset, source-volume and preview options
+cannot be combined with `--chart`.
+
+The Windows x64 wheel contains the renderer, BASS runtime, and the `clap`,
+`clap_impact`, `clap_punchy`, `snare`, and `snare_lo` presets. No KSM installation
+or setup command is needed. Other sample and switch-audio files resolve relative
+to the chart and must remain inside its directory. Package conversion instead
+uses the TOML directory as its containment boundary.
+
+The renderer applies authored effects and mixes keysounds before normalization.
+BGM volume controls its level relative to keysounds; the final mix receives one
+constant gain. Effects follow the authored chart regardless of player input.
+KSM's playback master compressor is not applied.
+Arcade slam feedback is retained rather than baked into the audio. Custom slam
+sounds, legacy alternate-BGM routing and unknown audio features are diagnosed;
+`--strict` rejects their omission. Missing resources and invalid parameters fail
+in either mode. Chart audio rendering does not write a VOX file; `package`
+produces the matching chart with native audio effects disabled.
 
 ## Jacket
 

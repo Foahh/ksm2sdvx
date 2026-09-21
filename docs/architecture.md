@@ -14,6 +14,9 @@ src/ksm2sdvx/
     vox/            target chart models, validation, serialization
     conversion/     timing, buttons, lasers, camera, feature accounting
     geometry/       curve evaluation, fitting, smoothing
+    audio.py        pure chart-audio compilation and rendered-chart adjustments
+    audio_model.py  immutable effect, laser and sample instructions
+    audio_timing.py exact pulse-to-frame timing and effect triggers
     application.py  source loading, conversion, staged chart/report writing
     cli.py          chart arguments and presentation
     types.py        pulses, durations, measures, ticks
@@ -22,6 +25,8 @@ src/ksm2sdvx/
     models.py       audio settings, measurements, requests and results
     interfaces.py   MusicProcessor and S3vEncoder protocols
     processor.py    FFmpeg analysis, timing, constant gain and verification
+    render_models.py neutral render requests, results and renderer protocol
+    renderer.py     bundled native helper and PCM preparation
     _windows.py     Windows WMA Professional encoding
     application.py  standalone audio file conversion
     cli.py          audio arguments and presentation
@@ -49,6 +54,7 @@ src/ksm2sdvx/
     inspection.py  read-only chart conversion and resource inventory
     report.py      inspection JSON serialization
     build.py       chart, metadata, music and jacket composition
+    audio.py       chart audio resource binding, rendering and reports
     interfaces.py  PackageWriter protocol
     writer.py      staged LayeredFS directory output
     errors.py      package configuration and composition failures
@@ -63,6 +69,9 @@ src/ksm2sdvx/
 ```
 
 All packages have ordinary `__init__.py` files. Tests live outside `src/`.
+The C++ renderer lives under `native/`; `external/ksm-v2` pins its upstream
+audio implementation, dependencies and sample assets. The CMake build selects
+only audio inputs and does not build the game.
 
 Public APIs live in their owning subpackages. The package root imports no
 components. Models use frozen, slotted dataclasses and tuple collections;
@@ -76,7 +85,7 @@ no application filesystem work and initialize no media processors.
 | Chart | KSON parsing, conversion, VOX serialization, chart file output | Implemented |
 | Resources | Resolve references and inventory shared files and presets | Implemented |
 | Package inspection | Validate selected charts and inventory their resources | Implemented, read-only |
-| Music | Measure loudness, normalize audio, encode music and previews | FFmpeg and Windows WMA Professional implementation; `MusicProcessor` and `S3vEncoder` protocols |
+| Music | Render chart effects and keysounds, normalize mixes, encode music and previews | Bundled ksmaudio renderer, FFmpeg and Windows WMA Professional; typed renderer and processor interfaces |
 | Jacket | Produce standard, small, large and selector jackets | FFmpeg implementation; `JacketProcessor` protocol |
 | Metadata | Produce a new song entry from source values and target defaults | Shift-JIS XML adapter; `MetadataConverter` protocol |
 | Package output | Write composed charts, metadata, and processed resources | Staged LayeredFS directory writer; `PackageWriter` protocol |
@@ -196,9 +205,23 @@ Score and radar calculation are not implemented: unspecified radar values and
 maximum EX scores are zero, with diagnostics. The serializer writes a Shift-JIS
 `music_db.merged.xml` fragment and rejects text that cannot be encoded.
 
-`FfmpegMusicProcessor.process_song` selects one constant gain using the full
-track's loudness and both full-track and preview peak headroom. The default target
-is −11 LUFS. Standalone `process` converts one requested interval. The Windows
+`compile_chart_audio` produces immutable audio instructions without file access.
+`AudioRenderRequest` binds those instructions to resolved music and sample files;
+`AudioRenderer` returns a completed PCM resource and a render receipt.
+`NativeAudioRenderer` prepares stereo 44.1 kHz floating-point inputs, invokes the
+bundled helper, and validates its response before publishing the PCM file.
+The helper uses ksmaudio from the pinned KSM submodule and processes effects on
+an offline sample clock. Presets and BASS libraries ship beside the executable.
+
+The package pipeline renders and normalizes each difficulty separately, then
+disables native chart effects only after the render succeeds. Exact source
+feature coverage resolves audio omissions before strict policy is enforced.
+Standalone chart conversion cannot claim that rendering has happened.
+
+`FfmpegMusicProcessor.process_preview` selects constant gain from the original
+full-track loudness and preview peak. Gameplay mixes each receive their own
+normalization, with a default target of −11 LUFS. Standalone `process` converts
+one requested interval. The Windows
 encoder produces WMA Professional audio, closes the ASF payload, then appends
 and validates the required S3V footer. Plain ASF files renamed to `.s3v` are not
 valid game output. There is no alternate-codec fallback.

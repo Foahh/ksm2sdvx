@@ -25,6 +25,7 @@ song_id = 3000 # Example only; choose an unused ID from 1 to 3071.
 # inf_ver = 0 # Default: 2 with an infinite chart, otherwise 0.
 
 [music]
+# Each difficulty renders its own FX audio; the preview uses the original track.
 # target_lufs = -11 # Default loudness target in LUFS; lower values are quieter.
 # true_peak_dbtp = -1.0 # Default peak limit in dBTP before encoding.
 
