@@ -11,7 +11,6 @@ from importlib.resources import files
 from pathlib import Path
 from typing import cast
 
-from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.common.types import JsonValue, json_ready
 from ksm2sdvx.music.errors import MusicError
 from ksm2sdvx.music.render_models import AudioRenderRequest, AudioRenderResult, AudioSource
@@ -282,18 +281,9 @@ class NativeAudioRenderer:
                 raise MusicError("The audio renderer did not produce its PCM output")
             _validate_pcm(output, frames)
             os.replace(output, request.destination)
-        diagnostics = (
-            Diagnostic(
-                "AUDIO_RENDERED",
-                Severity.INFO,
-                Stage.MUSIC,
-                f"Rendered {frames} stereo frames with {effects} effects and {keysounds} keysounds.",
-                "audio.rendering",
-            ),
-        )
         return AudioRenderResult(
             ProcessedResource(request.destination, ()),
-            diagnostics,
+            (),
             versions,
             frames,
             effects,

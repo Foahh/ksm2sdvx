@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.jacket.errors import JacketError
 from ksm2sdvx.jacket.models import JacketRequest, JacketResult, JacketSettings
 from ksm2sdvx.resources.models import ProcessedResource
@@ -130,7 +129,6 @@ class FfmpegJacketProcessor:
         match = re.fullmatch(r"([1-9][0-9]*),([1-9][0-9]*)", dimensions)
         if match is None:
             raise JacketError("Could not determine the source image dimensions.")
-        width, height = int(match[1]), int(match[2])
         data = _run(
             [
                 self.ffmpeg,
@@ -158,16 +156,4 @@ class FfmpegJacketProcessor:
         )
         _validate_png(data, int(request.settings.size))
         _write_png(destination, data)
-        diagnostics: tuple[Diagnostic, ...] = ()
-        if width != height:
-            diagnostics = (
-                Diagnostic(
-                    "JACKET_ASPECT_FIT",
-                    Severity.INFO,
-                    Stage.CONVERT,
-                    f"Resized {width}×{height} artwork preserving its aspect ratio with black margins.",
-                    "jacket",
-                    source_path=str(source),
-                ),
-            )
-        return JacketResult(ProcessedResource(destination, request.source.uses), diagnostics)
+        return JacketResult(ProcessedResource(destination, request.source.uses))

@@ -1,5 +1,6 @@
 """Audio normalization, timing, failure handling, and native S3V encoding."""
 
+import json
 import math
 import shutil
 import struct
@@ -72,6 +73,42 @@ def test_gain_preserves_dynamics_and_limits_true_peak() -> None:
     assert normalization_gain(LoudnessMeasurement(-20, -12), quiet) == pytest.approx(
         9 + 20 * math.log10(0.5)
     )
+
+
+@pytest.mark.parametrize(
+    "input_lufs,encoded_peak,ceiling,codes",
+    [
+        (-11.2, -0.9, -1.0, set[str]()),
+        (-12.0, -0.5, -1.0, set[str]()),
+        (-12.1, -0.9, -1.0, {"AUDIO_PEAK_LIMITED"}),
+        (-11.2, -0.4, -1.0, {"AUDIO_CODEC_PEAK"}),
+        (-11.2, 0.0, -0.1, {"AUDIO_CODEC_PEAK"}),
+    ],
+)
+def test_audio_warnings_only_flag_material_deviations(
+    tmp_path: Path,
+    ffmpeg: str,
+    input_lufs: float,
+    encoded_peak: float,
+    ceiling: float,
+    codes: set[str],
+) -> None:
+    class Measurements(FfmpegMusicProcessor):
+        def _analysis_output(self, source: Path, settings: S3vMusicSettings) -> str:
+            return json.dumps(
+                {
+                    "input_i": input_lufs,
+                    "input_tp": encoded_peak if source.suffix == ".s3v" else ceiling,
+                }
+            )
+
+    source = _source(tmp_path / "source.wav")
+    result = Measurements(ffmpeg, encoder=_PcmCapture()).process(
+        MusicRequest(source, tmp_path / "output.s3v", S3vMusicSettings(true_peak_dbtp=ceiling))
+    )
+    assert {d.code for d in result.diagnostics} == codes
+    assert result.gain_db == 0
+    assert result.output_measurement == LoudnessMeasurement(input_lufs, encoded_peak)
 
 
 @pytest.mark.parametrize(

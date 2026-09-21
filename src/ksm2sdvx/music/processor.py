@@ -313,28 +313,17 @@ class FfmpegMusicProcessor:
                 if settings.gain_db is None
                 else settings.gain_db
             )
-            description = f"Measured {measurement.integrated_lufs:.2f} LUFS and {peak:.2f} dBTP"
         else:
             if peak is None:
                 peak = _measurement_number(
                     _read_fields(self._analysis_output(source, settings)), "input_tp"
                 )
             gain = settings.gain_db
-            description = f"Measured preview peak {peak:.2f} dBTP"
         if peak + gain > settings.true_peak_dbtp + 0.05:
             raise MusicError("The supplied shared audio gain exceeds the preview true-peak ceiling")
         target = settings.target_lufs + 20 * math.log10(settings.source_volume)
-        diagnostics = [
-            Diagnostic(
-                code="AUDIO_NORMALIZED",
-                severity=Severity.INFO,
-                stage=Stage.MUSIC,
-                message=f"{description}; applied {gain:.3f} dB constant gain.",
-                feature="audio.normalization",
-                source_path=str(source),
-            )
-        ]
-        if measurement is not None and measurement.integrated_lufs + gain < target - 0.05:
+        diagnostics: list[Diagnostic] = []
+        if measurement is not None and measurement.integrated_lufs + gain < target - 1.0:
             diagnostics.append(
                 Diagnostic(
                     code="AUDIO_PEAK_LIMITED",
@@ -394,22 +383,7 @@ class FfmpegMusicProcessor:
                     if measurement is not None or encoded_fields.get("input_i") != "-inf"
                     else None
                 )
-                encoded_level = (
-                    f"{output_measurement.integrated_lufs:.2f} LUFS and "
-                    if output_measurement is not None
-                    else ""
-                )
-                diagnostics.append(
-                    Diagnostic(
-                        code="AUDIO_ENCODED",
-                        severity=Severity.INFO,
-                        stage=Stage.MUSIC,
-                        message=f"Decoded output measures {encoded_level}{encoded_peak:.2f} dBTP.",
-                        feature="audio.normalization",
-                        source_path=str(source),
-                    )
-                )
-                if encoded_peak > settings.true_peak_dbtp + 0.05:
+                if encoded_peak >= 0 or encoded_peak > settings.true_peak_dbtp + 0.5:
                     diagnostics.append(
                         Diagnostic(
                             code="AUDIO_CODEC_PEAK",

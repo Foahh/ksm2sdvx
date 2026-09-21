@@ -91,7 +91,6 @@ def test_sizes_rgb_and_containment(
     assert pixels[center : center + 3] == bytes((255, 0, 0))
     assert result.resource.path == output
     assert result.resource.uses == request.source.uses
-    assert [item.code for item in result.diagnostics] == ["JACKET_ASPECT_FIT"]
     assert tuple(output.parent.iterdir()) == (output,)
 
 
