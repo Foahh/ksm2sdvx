@@ -1,12 +1,11 @@
 """Argument and presentation adapters for chart conversion."""
 
 import argparse
-import sys
 from pathlib import Path
 
 from ksm2sdvx.chart import DEFAULT_PROFILE, ConversionOptions
 from ksm2sdvx.chart.application import convert_chart_file
-from ksm2sdvx.common.diagnostics import Diagnostic, Severity
+from ksm2sdvx.common.cli import print_diagnostics
 
 
 class ChartArguments(argparse.Namespace):
@@ -40,15 +39,6 @@ def conversion_options(args: ChartArguments) -> ConversionOptions:
         args.zoom_bottom_scale,
         args.tilt_scale,
     )
-
-
-def print_diagnostics(diagnostics: tuple[Diagnostic, ...]) -> None:
-    for diagnostic in diagnostics:
-        if diagnostic.severity != Severity.INFO:
-            print(
-                f"{diagnostic.severity.value}: {diagnostic.code} {diagnostic.json_pointer}: {diagnostic.message}",
-                file=sys.stderr,
-            )
 
 
 def run_chart(args: ChartArguments) -> int:

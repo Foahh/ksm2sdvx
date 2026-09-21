@@ -16,6 +16,10 @@ class Stage(StrEnum):
     PARSE = "parse"
     CONVERT = "convert"
     INSPECT = "inspect"
+    MUSIC = "music"
+    JACKET = "jacket"
+    METADATA = "metadata"
+    PACKAGE = "package"
 
 
 class FeatureStatus(StrEnum):
