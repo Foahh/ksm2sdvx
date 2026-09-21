@@ -14,7 +14,8 @@ target_include_directories(ksm2sdvx_audio SYSTEM PUBLIC
   "${KSM2SDVX_UPSTREAM}/kson/include/kson/third_party")
 target_link_libraries(ksm2sdvx_audio PUBLIC ksmaudio)
 target_compile_definitions(ksm2sdvx_audio PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
-target_compile_options(ksm2sdvx_audio PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/W4;/utf-8>")
+target_compile_options(ksm2sdvx_audio PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/W4>")
+target_compile_options(ksm2sdvx_audio PUBLIC "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
 add_executable(ksm2sdvx-render main.cpp)
 target_link_libraries(ksm2sdvx-render PRIVATE ksm2sdvx_audio)

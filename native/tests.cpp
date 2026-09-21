@@ -6,6 +6,7 @@
 #include <iostream>
 #include <numbers>
 #include <vector>
+#include <ksmaudio/Stream.hpp>
 
 namespace {
 using ksm2sdvx::Json;
@@ -51,6 +52,23 @@ std::vector<float> output_wave(const std::filesystem::path &path, std::size_t fr
 std::string utf8(const std::filesystem::path &path) {
   const auto value = path.u8string();
   return {reinterpret_cast<const char *>(value.data()), value.size()};
+}
+std::vector<float> stream_reference(const std::filesystem::path &path, std::size_t frames,
+                                    double volume = 1) {
+  require(BASS_Init(0, 44100, 0, nullptr, nullptr), "Cannot initialize reference stream");
+  std::vector<float> result(frames * 2);
+  {
+    ksmaudio::Stream stream(utf8(path), volume, true, true, false, 1, true);
+    for (std::size_t frame = 0; frame < frames; frame += 64) {
+      const auto bytes = static_cast<DWORD>(std::min<std::size_t>(64, frames - frame) * 8);
+      require(stream.getData(result.data() + frame * 2, bytes) == bytes,
+              "Cannot decode reference stream");
+    }
+  }
+  BASS_Free();
+  for (auto &value : result)
+    value = std::clamp(value, -1.0f, 1.0f);
+  return result;
 }
 Json request(const std::filesystem::path &source) {
   return {{"protocol_version", 1},
@@ -102,7 +120,10 @@ int main() {
     const auto base = request(source);
     const auto receipt = ksm2sdvx::render(base, output);
     require(receipt.at("frames") == 1024, "Wrong duration");
-    require(output_wave(output, 1024) == original, "Dry rendering changes PCM");
+    require(receipt.at("processing_profile") == "ksm-compressed-v1", "Wrong processing profile");
+    const auto dry = stream_reference(source, 1024);
+    require(output_wave(output, 1024) == dry, "Music does not use the upstream compressor chain");
+    require(dry != original, "Music compressor and gain stages were bypassed");
 
     auto offset = base;
     offset["offset_frames"] = -13;
@@ -111,7 +132,15 @@ int main() {
     const auto shifted = output_wave(output, 1037);
     for (int i = 0; i < 26; ++i)
       require(shifted[i] == 0, "Negative offset did not insert silence");
-    require(shifted[76] == original[50] * .5f, "Offset or relative BGM volume is incorrect");
+    const auto quiet = stream_reference(source, 1024, .5);
+    require(shifted[76] == quiet[50], "Offset or relative BGM volume is incorrect");
+
+    auto trimmed = base;
+    trimmed["offset_frames"] = 13;
+    ksm2sdvx::render(trimmed, output);
+    const auto trimmed_pcm = output_wave(output, 1024);
+    require(std::abs(trimmed_pcm[0] - dry[26]) < 1e-6f, "Positive offset did not trim music");
+    require(trimmed_pcm.back() == 0, "Trimmed music did not end with silence");
 
     auto crusher = base;
     crusher["program"]["effects"].push_back(
@@ -119,10 +148,10 @@ int main() {
     activate(crusher, "bitcrusher", 127, 899);
     ksm2sdvx::render(crusher, output);
     const auto crushed = output_wave(output, 1024);
-    require(crushed != original, "Bitcrusher did not process audio");
-    require(std::equal(original.begin(), original.begin() + 254, crushed.begin()),
+    require(crushed != dry, "Bitcrusher did not process audio");
+    require(std::equal(dry.begin(), dry.begin() + 254, crushed.begin()),
             "FX started before its exact frame");
-    require(std::equal(original.begin() + 1798, original.end(), crushed.begin() + 1798),
+    require(std::equal(dry.begin() + 1798, dry.end(), crushed.begin() + 1798),
             "FX continued beyond its exact frame");
     ksm2sdvx::render(crusher, output);
     require(output_wave(output, 1024) == crushed, "Rendering is not deterministic");
@@ -137,8 +166,8 @@ int main() {
     ksm2sdvx::render(phaser, output);
     const auto quiet_phaser = output_wave(output, 1024);
     for (std::size_t i = 0; i < full_phaser.size(); ++i)
-      require(quiet_phaser[i] == full_phaser[i] * .37f,
-              "Relative BGM gain was applied before effect processing");
+      require(std::abs(quiet_phaser[i] - full_phaser[i] * .37f) < 1e-6f,
+              "Quiet music did not preserve authored relative gain");
 
     auto precedence = crusher;
     precedence["program"]["fx"][0]["start_frame"] = 0;
@@ -146,6 +175,8 @@ int main() {
     precedence["program"]["fx"][0]["end_frame"] = 1024;
     precedence["program"]["fx"][0]["parameters"] = {{"mix", "0%"}};
     precedence["program"]["fx_holds"] = {{{"start_frame", 0}, {"end_frame", 1024}, {"lane", 0}}};
+    precedence["program"]["fx_holds"].push_back(
+        {{"start_frame", 401}, {"end_frame", 801}, {"lane", 1}});
     precedence["program"]["fx"].push_back({{"start_frame", 401},
                                            {"end_frame", 801},
                                            {"lane", 1},
@@ -159,12 +190,26 @@ int main() {
                                                 {"value", "100%"}});
     ksm2sdvx::render(precedence, output);
     const auto overridden = output_wave(output, 1024);
-    require(std::equal(original.begin(), original.begin() + 802, overridden.begin()),
+    require(std::equal(dry.begin(), dry.begin() + 802, overridden.begin()),
             "Persistent parameters overrode note parameters");
-    require(!std::equal(original.begin() + 802, original.begin() + 1602, overridden.begin() + 802),
+    require(!std::equal(dry.begin() + 802, dry.begin() + 1602, overridden.begin() + 802),
             "Later FX hold did not take precedence");
-    require(std::equal(original.begin() + 1602, original.end(), overridden.begin() + 1602),
+    require(std::equal(dry.begin() + 1602, dry.end(), overridden.begin() + 1602),
             "Earlier hold did not regain its override");
+
+    // A touching hold is continuous input, so it must not steal the other lane's override.
+    auto touching = precedence;
+    touching["program"]["fx_holds"][0]["end_frame"] = 600;
+    touching["program"]["fx_holds"].push_back(
+        {{"start_frame", 600}, {"end_frame", 1024}, {"lane", 0}});
+    touching["program"]["fx"][0]["end_frame"] = 600;
+    auto continuation = touching["program"]["fx"][0];
+    continuation["start_frame"] = 600;
+    continuation["hold_start_frame"] = 600;
+    continuation["end_frame"] = 1024;
+    touching["program"]["fx"].push_back(continuation);
+    ksm2sdvx::render(touching, output);
+    require(output_wave(output, 1024) == overridden, "Touching holds changed FX lane precedence");
 
     auto laser = base;
     auto laser_effect =
@@ -196,11 +241,11 @@ int main() {
                                              {"curve_y", .5}}}}});
     ksm2sdvx::render(laser, output);
     const auto filtered = output_wave(output, 1024);
-    require(std::equal(original.begin(), original.begin() + 258, filtered.begin()),
+    require(std::equal(dry.begin(), dry.begin() + 258, filtered.begin()),
             "Laser DSP began outside the section");
-    require(!std::equal(original.begin() + 802, original.begin() + 1798, filtered.begin() + 802),
+    require(!std::equal(dry.begin() + 802, dry.begin() + 1798, filtered.begin() + 802),
             "Laser jump did not update its effect value");
-    require(std::equal(original.begin() + 1798, original.end(), filtered.begin() + 1798),
+    require(std::equal(dry.begin() + 1798, dry.end(), filtered.begin() + 1798),
             "Laser DSP continued outside the section");
 
     auto invalid = crusher;
@@ -227,6 +272,15 @@ int main() {
     require(mixed[302] == .05f, "Keysound retrigger did not replace the existing voice");
     require(mixed[502] == 0, "Keysound tail did not end");
 
+    auto loud_keys = keys;
+    loud_keys["program"]["keysounds"] = {
+        {{"frame", 101}, {"lane", 0}, {"resource_id", "chip"}, {"volume", 20}}};
+    const auto loud_receipt = ksm2sdvx::render(loud_keys, output);
+    const auto saturated = output_wave(output, 1024);
+    require(saturated[202] == 1 && saturated[402] == 0,
+            "Mixed keysounds did not saturate at the PCM export range");
+    require(loud_receipt.at("saturated_samples") == 200, "Wrong saturated sample count");
+
     auto polyphonic = keys;
     polyphonic["program"]["key_sound_polyphony"] = 10;
     ksm2sdvx::render(polyphonic, output);
@@ -248,6 +302,7 @@ int main() {
 
     const auto alternate = directory / "alternate.wav";
     input_wave(alternate, std::vector<float>(2048, .125f));
+    const auto alternate_dry = stream_reference(alternate, 1024);
     auto switched = base;
     switched["tracks"].push_back({{"id", "alternate"}, {"path", utf8(alternate)}});
     switched["program"]["effects"].push_back(effect("switch_audio", {{"filename", "alternate"}}));
@@ -263,8 +318,8 @@ int main() {
                                          {"parameters", Json::object()}});
     ksm2sdvx::render(switched, output);
     const auto routed = output_wave(output, 1024);
-    require(routed[256] == original[256] && routed[258] == .125f && routed[600] == .125f &&
-                routed[602] == original[602],
+    require(routed[256] == dry[256] && routed[258] == alternate_dry[258] &&
+                routed[600] == alternate_dry[600] && routed[602] == dry[602],
             "switch_audio routing is not frame-aligned");
 
     // Construct and process every DSP family, including effects with delay buffers.
@@ -284,6 +339,27 @@ int main() {
     signed_range["program"]["effects"].push_back(effect("pitch_shift", {{"pitch", "-12--7"}}));
     activate(signed_range, "pitch_shift");
     ksm2sdvx::render(signed_range, output);
+
+    std::vector<float> hot(44100 * 2);
+    for (std::size_t i = 0; i < hot.size() / 2; ++i)
+      hot[i * 2] = hot[i * 2 + 1] = static_cast<float>(2.0 * std::sin(i * .061));
+    input_wave(source, hot);
+    ksm2sdvx::render(base, output);
+    const auto compressed = output_wave(output, 44100);
+    require(compressed == stream_reference(source, 44100),
+            "Loud music differs from the upstream compression envelope");
+    auto low_volume = base;
+    low_volume["bgm_volume"] = .25;
+    ksm2sdvx::render(low_volume, output);
+    const auto low_pcm = output_wave(output, 44100);
+    require(low_pcm == stream_reference(source, 44100, .25),
+            "Authored gain was applied after compression");
+    double loud_energy = 0, quiet_energy = 0;
+    for (std::size_t i = 22050; i < hot.size(); ++i) {
+      loud_energy += compressed[i] * compressed[i];
+      quiet_energy += low_pcm[i] * low_pcm[i];
+    }
+    require(loud_energy < quiet_energy * 12, "Compressor did not control sustained loud music");
     for (const auto &file : {source, output, sample, alternate})
       std::filesystem::remove(file);
     std::filesystem::remove(directory);

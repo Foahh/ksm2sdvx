@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <ksmaudio/AudioEffect/All.hpp>
+#include <ksmaudio/Stream.hpp>
 
 namespace ksm2sdvx {
 namespace {
@@ -62,6 +63,44 @@ struct Bass {
     BASS_SetConfig(BASS_CONFIG_FLOATDSP, TRUE);
   }
   ~Bass() { BASS_Free(); }
+};
+
+class MusicStream {
+  ksmaudio::Stream stream;
+
+public:
+  const Frame frames;
+
+  MusicStream(const std::filesystem::path &path, double volume)
+      : stream(path_utf8(path), volume, true, true, false, 1.0, true),
+        frames(static_cast<Frame>(std::llround(stream.duration().count() * rate))) {
+    if (stream.sampleRate() != rate || stream.numChannels() != 2)
+      throw RenderError("audio.input_format", "Renderer inputs must be stereo 44100 Hz audio.");
+  }
+
+  static std::string path_utf8(const std::filesystem::path &path) {
+    const auto value = path.u8string();
+    return {reinterpret_cast<const char *>(value.data()), value.size()};
+  }
+
+  void attach(ae::IAudioEffect *effect, int priority) {
+    if (!stream.addAudioEffect(effect, priority))
+      throw RenderError("audio.runtime_effect", "Cannot attach an audio effect to the music stream.");
+  }
+
+  void read(Frame frame, Frame offset, std::span<float> output) {
+    std::fill(output.begin(), output.end(), 0.0f);
+    const auto source_frame = frame + offset;
+    if (source_frame < 0 || source_frame >= frames)
+      return;
+    if (frame == 0 && offset > 0)
+      stream.seekPosSec(ksmaudio::SecondsF{static_cast<double>(offset) / rate});
+    const auto count = stream.getData(output.data(), static_cast<DWORD>(output.size_bytes()));
+    if (count == static_cast<DWORD>(-1))
+      throw RenderError("audio.decode", "Cannot read the effected music stream.");
+    if (count % (2 * sizeof(float)) != 0)
+      throw RenderError("audio.decode", "Incomplete stereo PCM frame.");
+  }
 };
 
 std::vector<float> decode(const std::filesystem::path &path) {
@@ -485,16 +524,6 @@ Program parse_program(const Json &data) {
   return program;
 }
 
-void copy_track(const std::vector<float> &source, Frame start, std::span<float> output,
-                float volume) {
-  for (std::size_t i = 0; i < output.size(); ++i) {
-    const auto sample = start * 2 + static_cast<Frame>(i);
-    output[i] = sample < 0 || sample >= static_cast<Frame>(source.size())
-                    ? 0
-                    : source[static_cast<std::size_t>(sample)] * volume;
-  }
-}
-
 void apply_parameters(Effect &effect, Frame frame, const Invocation *invocation) {
   auto parameters = effect.defaults;
   for (auto it = effect.changes.begin(); it != effect.changes.end() && it->first <= frame; ++it)
@@ -522,18 +551,19 @@ Json render(const Json &request, const std::filesystem::path &destination) {
   const auto volume = number(request.at("bgm_volume"), "bgm_volume");
   if (volume < 0)
     invalid("BGM volume must be nonnegative.");
-  std::map<std::string, std::vector<float>> tracks;
+  std::map<std::string, std::filesystem::path> tracks;
   std::map<std::string, std::vector<float>> samples;
-  const auto load = [](const Json &items, auto &destination) {
-    for (const auto &item : items) {
-      const auto id = item.at("id").template get<std::string>();
-      if (destination.contains(id))
-        invalid("Duplicate audio resource identifier.");
-      destination.emplace(id, decode(path_from_utf8(item.at("path").template get<std::string>())));
-    }
-  };
-  load(request.at("tracks"), tracks);
-  load(request.at("samples"), samples);
+  for (const auto &item : request.at("tracks")) {
+    const auto id = item.at("id").get<std::string>();
+    if (!tracks.emplace(id, path_from_utf8(item.at("path").get<std::string>())).second)
+      invalid("Duplicate audio resource identifier.");
+  }
+  for (const auto &item : request.at("samples")) {
+    const auto id = item.at("id").get<std::string>();
+    if (samples.contains(id))
+      invalid("Duplicate audio resource identifier.");
+    samples.emplace(id, decode(path_from_utf8(item.at("path").get<std::string>())));
+  }
   if (!tracks.contains("main"))
     invalid("A main audio track is required.");
   for (const auto &effect : program.effects)
@@ -541,8 +571,13 @@ Json render(const Json &request, const std::filesystem::path &destination) {
       throw RenderError("audio.missing_resource",
                         "Missing switch_audio source: " + effect.switch_track);
 
+  MusicStream main_stream(tracks.at("main"), volume);
+  for (auto &effect : program.effects)
+    if (effect.dsp)
+      main_stream.attach(effect.dsp.get(), effect.priority);
+
   Frame duration = std::max(integer(request.at("duration_frames"), "duration_frames"),
-                            static_cast<Frame>(tracks.at("main").size() / 2) - offset);
+                            main_stream.frames - offset);
   for (const auto &event : program.keysounds) {
     if (!samples.contains(event.id))
       throw RenderError("audio.missing_resource", "Missing keysound: " + event.id);
@@ -553,14 +588,20 @@ Json render(const Json &request, const std::filesystem::path &destination) {
   if (offset < 0)
     program.boundaries.insert(-offset);
 
-  // Each switched FX source retains its own filter history while inaudible.
+  // Switched sources keep independent filter and compressor histories while inaudible.
   std::map<std::string, std::vector<Effect>> switched_filters;
+  std::map<std::pair<std::string, bool>, std::unique_ptr<MusicStream>> switched_streams;
   for (const auto &effect : program.effects) {
-    if (effect.dsp || effect.laser)
+    if (effect.dsp)
+      continue;
+    const auto key = std::pair(effect.switch_track, effect.laser);
+    if (switched_streams.contains(key))
+      continue;
+    auto &stream = switched_streams[key];
+    stream = std::make_unique<MusicStream>(tracks.at(effect.switch_track), volume);
+    if (effect.laser)
       continue;
     auto &filters = switched_filters[effect.switch_track];
-    if (!filters.empty())
-      continue;
     for (const auto &definition : request.at("program").at("effects")) {
       if (definition.at("bus") != "laser" || !definition.value("builtin", false) ||
           definition.at("type") == "switch_audio")
@@ -569,22 +610,18 @@ Json render(const Json &request, const std::filesystem::path &destination) {
       filter.changes = program.effects[program.effect_index(filter.name, true)].changes;
       filters.push_back(std::move(filter));
     }
-    std::stable_sort(filters.begin(), filters.end(),
-                     [](const Effect &a, const Effect &b) { return a.priority > b.priority; });
+    for (auto &filter : filters)
+      stream->attach(filter.dsp.get(), filter.priority);
   }
-  std::vector<std::size_t> order;
-  for (std::size_t i = 0; i < program.effects.size(); ++i)
-    if (program.effects[i].dsp)
-      order.push_back(i);
-  std::stable_sort(order.begin(), order.end(), [&](auto a, auto b) {
-    return program.effects[a].priority > program.effects[b].priority;
-  });
   struct Voice {
     Frame start;
     float volume;
   };
   std::map<std::string, std::vector<Voice>> voices;
   std::size_t key_cursor = 0;
+  std::uint64_t saturated_samples = 0;
+  std::array<bool, 2> previous_holds{};
+  int last_pressed_lane = 0;
   WaveWriter output(destination, duration);
   std::array<float, block_frames * 2> main_buffer{}, switch_buffer{}, selected_buffer{};
   for (Frame frame = 0; frame < duration;) {
@@ -593,19 +630,21 @@ Json render(const Json &request, const std::filesystem::path &destination) {
     const auto size = static_cast<std::size_t>(count * 2);
     auto main = std::span(main_buffer).first(size);
     auto selected = std::span(selected_buffer).first(size);
-    copy_track(tracks.at("main"), frame + offset, main, 1);
-
     std::unordered_map<std::size_t, const Invocation *> active;
     const Invocation *switch_fx = nullptr;
-    bool hold_active = false;
+    std::array<bool, 2> held{};
     for (const auto &value : program.holds)
-      hold_active |= value.start <= frame && frame < value.end;
+      held[value.lane] |= value.start <= frame && frame < value.end;
+    for (int lane = 0; lane < 2; ++lane)
+      if (held[lane] && !previous_holds[lane])
+        last_pressed_lane = lane;
+    previous_holds = held;
+    const bool hold_active = held[0] || held[1];
     for (const auto &invocation : program.invocations) {
       if (frame < invocation.span.start || frame >= invocation.span.end)
         continue;
       auto it = active.find(invocation.effect);
-      if (it == active.end() || std::pair(invocation.hold_start, invocation.span.lane) >
-                                    std::pair(it->second->hold_start, it->second->span.lane))
+      if (it == active.end() || invocation.span.lane == last_pressed_lane)
         active[invocation.effect] = &invocation;
       if (!program.effects[invocation.effect].dsp &&
           (!switch_fx || invocation.span.lane < switch_fx->span.lane))
@@ -630,8 +669,10 @@ Json render(const Json &request, const std::filesystem::path &destination) {
                             .bpm = static_cast<float>(tempo.bpm),
                             .sec = static_cast<float>(frame) / rate,
                             .playbackSpeed = 1};
-    for (const auto index : order) {
+    for (std::size_t index = 0; index < program.effects.size(); ++index) {
       auto &effect = program.effects[index];
+      if (!effect.dsp)
+        continue;
       const auto invocation = active.contains(index) ? active.at(index) : nullptr;
       apply_parameters(effect, frame, invocation);
       effect.dsp->setBypass(effect.laser ? !laser_active : !hold_active);
@@ -645,28 +686,29 @@ Json render(const Json &request, const std::filesystem::path &destination) {
                            ? std::make_optional(static_cast<std::size_t>(invocation->span.lane))
                            : std::nullopt);
       }
-      effect.dsp->process(main.data(), size);
     }
+    main_stream.read(frame, offset, main);
     std::copy(main.begin(), main.end(), selected.begin());
-    if (!switch_fx && laser_active && laser_index && !program.effects[*laser_index].dsp)
-      copy_track(tracks.at(program.effects[*laser_index].switch_track), frame + offset, selected,
-                 1);
-    for (auto &[id, filters] : switched_filters) {
+    for (auto &[key, stream] : switched_streams) {
+      const auto &[id, is_laser] = key;
       auto buffer = std::span(switch_buffer).first(size);
-      copy_track(tracks.at(id), frame + offset, buffer, 1);
-      for (auto &filter : filters) {
-        apply_parameters(filter, frame, nullptr);
-        filter.dsp->setBypass(!laser_active);
-        filter.dsp->updateStatusByLaser(status, laser_index && program.effects[*laser_index].name ==
-                                                                   filter.name);
-        filter.dsp->process(buffer.data(), size);
+      if (!is_laser) {
+        for (auto &filter : switched_filters.at(id)) {
+          apply_parameters(filter, frame, nullptr);
+          filter.dsp->setBypass(!laser_active);
+          filter.dsp->updateStatusByLaser(status, laser_index && program.effects[*laser_index].name ==
+                                                                     filter.name);
+        }
       }
-      if (switch_fx && program.effects[switch_fx->effect].switch_track == id)
+      stream->read(frame, offset, buffer);
+      const bool selected_fx = !is_laser && switch_fx &&
+                               program.effects[switch_fx->effect].switch_track == id;
+      const bool selected_laser = is_laser && !switch_fx && laser_active && laser_index &&
+                                  !program.effects[*laser_index].dsp &&
+                                  program.effects[*laser_index].switch_track == id;
+      if (selected_fx || selected_laser)
         std::copy(buffer.begin(), buffer.end(), selected.begin());
     }
-
-    for (auto &sample : selected)
-      sample *= static_cast<float>(volume);
 
     while (key_cursor < program.keysounds.size() && program.keysounds[key_cursor].frame <= frame) {
       const auto &event = program.keysounds[key_cursor++];
@@ -696,6 +738,16 @@ Json render(const Json &request, const std::filesystem::path &destination) {
       }
       ++it;
     }
+    // Match the signed PCM export range before loudness measurement. Keep the
+    // intermediate floating point so quieter samples are not quantized twice.
+    for (auto &value : selected) {
+      if (!std::isfinite(value))
+        throw RenderError("audio.nonfinite", "An effect produced non-finite audio.");
+      if (value < -1.0f || value > 1.0f) {
+        ++saturated_samples;
+        value = std::clamp(value, -1.0f, 1.0f);
+      }
+    }
     output.append(selected);
     frame += count;
   }
@@ -706,6 +758,8 @@ Json render(const Json &request, const std::filesystem::path &destination) {
           {"channels", 2},
           {"bass_version", version_string(BASS_GetVersion())},
           {"bass_fx_version", version_string(BASS_FX_GetVersion())},
+          {"processing_profile", "ksm-compressed-v1"},
+          {"saturated_samples", saturated_samples},
           {"effects", program.effects.size()},
           {"keysounds", program.keysounds.size()}};
 }
