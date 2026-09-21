@@ -1,7 +1,7 @@
 """Package inputs, inspection results, and composed output models."""
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from ksm2sdvx.chart import ConversionResult, KsonChart, VoxChart
 from ksm2sdvx.common.diagnostics import Diagnostic, Severity
@@ -44,12 +44,18 @@ class PackageChart:
 
 
 @dataclass(frozen=True, slots=True)
+class PackageResource:
+    resource: ProcessedResource
+    output_path: PurePosixPath
+
+
+@dataclass(frozen=True, slots=True)
 class SdvxPackage[MetadataT]:
     """Composed chart data, target metadata, and processed file references."""
 
     charts: tuple[PackageChart, ...]
     metadata: MetadataT
-    resources: tuple[ProcessedResource, ...]
+    resources: tuple[PackageResource, ...]
     diagnostics: tuple[Diagnostic, ...] = ()
 
 
