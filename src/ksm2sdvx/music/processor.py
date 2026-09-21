@@ -267,6 +267,33 @@ class FfmpegMusicProcessor:
     def process(self, request: MusicRequest[S3vMusicSettings]) -> MusicResult:
         return self._process(request)
 
+    def process_preview(self, request: MusicRequest[S3vMusicSettings]) -> MusicResult:
+        """Normalize a dry preview against its original full-track loudness.
+
+        The preview peak may reduce the gain. Chart offsets and rendered
+        difficulty measurements never influence this operation.
+        """
+        settings = request.settings
+        _validate_settings(settings)
+        if settings.preview_start_ms is None:
+            raise MusicError("Preview processing requires an explicit preview interval")
+        if settings.offset_ms != 0 or settings.gain_db is not None:
+            raise MusicError("Preview processing selects its gain and uses original audio timing")
+        source, _ = _request_paths(request)
+        reference = self._analyze(
+            source,
+            replace(settings, preview_start_ms=None, preview_duration_ms=None),
+        )
+        preview_peak = _measurement_number(
+            _read_fields(self._analysis_output(source, settings)), "input_tp"
+        )
+        target = settings.target_lufs + 20 * math.log10(settings.source_volume)
+        gain = min(target - reference.integrated_lufs, settings.true_peak_dbtp - preview_peak)
+        result = self._process(
+            replace(request, settings=replace(settings, gain_db=gain)), peak=preview_peak
+        )
+        return replace(result, measurement=reference)
+
     def _process(
         self,
         request: MusicRequest[S3vMusicSettings],
@@ -293,7 +320,7 @@ class FfmpegMusicProcessor:
                     _read_fields(self._analysis_output(source, settings)), "input_tp"
                 )
             gain = settings.gain_db
-            description = f"Reused the main track gain; measured {peak:.2f} dBTP"
+            description = f"Measured preview peak {peak:.2f} dBTP"
         if peak + gain > settings.true_peak_dbtp + 0.05:
             raise MusicError("The supplied shared audio gain exceeds the preview true-peak ceiling")
         target = settings.target_lufs + 20 * math.log10(settings.source_volume)
@@ -360,9 +387,12 @@ class FfmpegMusicProcessor:
                 if not encoded.is_file() or encoded.stat().st_size == 0:
                     raise MusicError("Audio encoder did not produce its output file")
                 encoded_analysis = self._analysis_output(encoded, S3vMusicSettings())
-                encoded_peak = _measurement_number(_read_fields(encoded_analysis), "input_tp")
+                encoded_fields = _read_fields(encoded_analysis)
+                encoded_peak = _measurement_number(encoded_fields, "input_tp")
                 output_measurement = (
-                    _read_measurement(encoded_analysis) if measurement is not None else None
+                    _read_measurement(encoded_analysis)
+                    if measurement is not None or encoded_fields.get("input_i") != "-inf"
+                    else None
                 )
                 encoded_level = (
                     f"{output_measurement.integrated_lufs:.2f} LUFS and "

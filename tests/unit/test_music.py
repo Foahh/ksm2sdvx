@@ -192,6 +192,39 @@ def test_song_rejects_mismatched_normalization_before_writing(tmp_path: Path) ->
     assert not tuple(tmp_path.iterdir())
 
 
+def test_preview_gain_uses_original_full_track_not_preview_loudness(
+    tmp_path: Path, ffmpeg: str
+) -> None:
+    source = _source(tmp_path / "source.wav", loud_intro=True)
+    processor = FfmpegMusicProcessor(ffmpeg, encoder=_PcmCapture())
+    settings = S3vMusicSettings(preview_start_ms=1500, preview_duration_ms=1000)
+    preview = processor.process_preview(MusicRequest(source, tmp_path / "preview.s3v", settings))
+    original = processor.analyze(tmp_path / "source.wav")
+    assert preview.measurement == original
+    assert preview.gain_db == pytest.approx(normalization_gain(original, S3vMusicSettings()))
+    measured_preview = processor.analyze(preview.resource.path)
+    assert measured_preview.integrated_lufs < -20
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        S3vMusicSettings(),
+        S3vMusicSettings(preview_start_ms=0, preview_duration_ms=500, offset_ms=100),
+        S3vMusicSettings(preview_start_ms=0, preview_duration_ms=500, gain_db=0),
+    ],
+)
+def test_preview_reference_rejects_conflicting_timing_or_gain(
+    tmp_path: Path, settings: S3vMusicSettings
+) -> None:
+    source = ResourceRecord("source.wav", tmp_path / "source.wav", False, True, ())
+    with pytest.raises(MusicError):
+        FfmpegMusicProcessor().process_preview(
+            MusicRequest(source, tmp_path / "preview.s3v", settings)
+        )
+    assert not tuple(tmp_path.iterdir())
+
+
 def test_silence_and_missing_executable_are_expected_errors(tmp_path: Path, ffmpeg: str) -> None:
     source = _source(tmp_path / "silent.wav", silence=True)
     output = tmp_path / "silent.s3v"
