@@ -19,6 +19,7 @@ from ksm2sdvx.common.types import json_ready
 from ksm2sdvx.jacket.cli import JacketArguments, add_jacket_arguments, run_jacket
 from ksm2sdvx.music.cli import AudioArguments, add_audio_arguments, run_audio
 from ksm2sdvx.pipeline import SourcePackage, inspect_package
+from ksm2sdvx.pipeline.audio import convert_chart_audio_file
 from ksm2sdvx.pipeline.build import build_package
 from ksm2sdvx.pipeline.config import load_package_config
 from ksm2sdvx.pipeline.report import inspection_to_dict
@@ -44,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     chart.add_argument("-o", "--output", type=Path)
     audio = commands.add_parser("audio", help="Normalize audio and write a WMA Professional .s3v")
     add_audio_arguments(audio)
+    audio.add_argument("--strict", action="store_true", help="Reject omitted audio features")
     jacket = commands.add_parser("jacket", help="Resize artwork and write an arcade RGB PNG")
     add_jacket_arguments(jacket)
     inspect = commands.add_parser("inspect", help="Inspect charts and resources as read-only JSON")
@@ -66,9 +68,39 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv, namespace=Arguments())
+    parser = _parser()
+    args = parser.parse_args(argv, namespace=Arguments())
+    if (
+        args.command == "audio"
+        and args.chart is not None
+        and any(
+            value is not None
+            for value in (
+                args.audio_offset_ms,
+                args.audio_source_volume,
+                args.preview_start_ms,
+                args.preview_duration_ms,
+            )
+        )
+    ):
+        parser.error(
+            "--chart uses KSON timing and volume; omit raw-audio timing and volume options"
+        )
     try:
         if args.command == "audio":
+            if args.chart is not None:
+                rendered = convert_chart_audio_file(
+                    args.chart,
+                    output=args.output,
+                    strict=args.strict,
+                    target_lufs=args.target_lufs,
+                    true_peak_dbtp=args.true_peak_dbtp,
+                    gain_db=args.gain_db,
+                    ffmpeg=args.ffmpeg,
+                )
+                print_diagnostics(rendered.diagnostics)
+                print(f"Audio: {rendered.destination}\nReport: {rendered.report_path}")
+                return 0
             return run_audio(args)
         if args.command == "jacket":
             return run_jacket(args)
