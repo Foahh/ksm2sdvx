@@ -17,6 +17,7 @@ from ksm2sdvx.chart import (
 from ksm2sdvx.chart.audio import ChartAudioProgram, apply_rendered_audio, compile_chart_audio
 from ksm2sdvx.chart.conversion.source_policy import IGNORED_RESOURCE_ROLES, ignored_source_path
 from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
+from ksm2sdvx.common.jobs import JobControl, checkpoint
 from ksm2sdvx.common.types import JsonValue
 from ksm2sdvx.jacket import (
     FfmpegJacketProcessor,
@@ -94,6 +95,7 @@ def _load_charts(
     config: PackageConfig,
     options: ConversionOptions,
     profile: VoxProfile,
+    control: JobControl | None = None,
 ) -> tuple[tuple[_Chart, ...], tuple[ResourceRecord, ...], list[Diagnostic]]:
     root = config.root.resolve()
     if not root.is_dir() or not config.charts:
@@ -102,6 +104,7 @@ def _load_charts(
     references: list[ResourceInput] = []
     diagnostics: list[Diagnostic] = []
     for binding in config.charts:
+        checkpoint(control, f"Reading chart: {binding.path.name}")
         path = binding.path.resolve()
         if not path.is_relative_to(root):
             raise PackageError("Chart escapes the source root")
@@ -174,6 +177,7 @@ def build_package(
     ffmpeg: str = "ffmpeg",
     ffprobe: str = "ffprobe",
     renderer: AudioRenderer | None = None,
+    control: JobControl | None = None,
 ) -> PackageWriteResult:
     """Build one explicitly grouped song into a new mod directory."""
     try:
@@ -185,6 +189,7 @@ def build_package(
             ffmpeg=ffmpeg,
             ffprobe=ffprobe,
             renderer=renderer,
+            control=control,
         )
     except OSError as exc:
         raise PackageError(f"Package filesystem operation failed: {exc}") from exc
@@ -199,6 +204,7 @@ def _build_package(
     ffmpeg: str,
     ffprobe: str,
     renderer: AudioRenderer | None,
+    control: JobControl | None,
 ) -> PackageWriteResult:
     options.validate()
     profile.validate()
@@ -208,7 +214,7 @@ def _build_package(
     destination = destination.resolve()
     if destination.exists():
         raise PackageError("Package output already exists; choose a new destination")
-    charts, assets, diagnostics = _load_charts(config, options, profile)
+    charts, assets, diagnostics = _load_charts(config, options, profile, control)
     jackets = {
         chart.binding.path: _owned_resource(assets, chart.binding.path, "jacket")
         for chart in charts
@@ -344,6 +350,7 @@ def _build_package(
             target_lufs=config.target_lufs,
             true_peak_dbtp=config.true_peak_dbtp,
         )
+        checkpoint(control, "Encoding preview; the current media operation must finish")
         preview = music_processor.process_preview(
             MusicRequest(
                 music,
@@ -361,6 +368,10 @@ def _build_package(
         )
         diagnostics.extend(preview.diagnostics)
         for chart, assignment in zip(charts, assignments, strict=True):
+            checkpoint(
+                control,
+                f"Rendering {assignment.slot.value}; the current media operation must finish",
+            )
             rendered = render_chart_audio(
                 chart.source,
                 chart.program,
@@ -385,6 +396,10 @@ def _build_package(
                 keysound_sample=SILENT_KEYSOUND_SAMPLE if sampler_filename is not None else 0,
             )
             rendered_charts.append(replace(chart, conversion=conversion))
+            checkpoint(
+                control,
+                f"Encoding {assignment.slot.value}; the current media operation must finish",
+            )
             full = music_processor.process(
                 MusicRequest(
                     rendered_music_resource(rendered, chart.binding.path),
@@ -426,6 +441,7 @@ def _build_package(
                 (JacketSize.LARGE, "big"),
                 (JacketSize.SELECTOR, "selector"),
             ):
+                checkpoint(control, f"Preparing {assignment.slot.value} jacket: {label}")
                 filename = (
                     f"jk_{config.song_id:04}_{assignment.slot.number}_t.png"
                     if label == "selector"
@@ -500,4 +516,5 @@ def _build_package(
             },
             "diagnostics": tuple(d.to_dict() for d in diagnostics),
         }
+        checkpoint(control, "Writing prepared song pack")
         return LayeredFsPackageWriter(report=report).write(package, destination=destination)

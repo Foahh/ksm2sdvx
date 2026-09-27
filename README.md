@@ -30,6 +30,12 @@ uv run ksm2sdvx package song/package.toml
 Package creation needs Windows with the Windows Media Format runtime, plus
 FFmpeg and FFprobe. See [package creation](docs/package.md) for setup, configuration, and output.
 
+## Desktop Song Pack Manager
+
+```sh
+uv run --extra ui ksm2sdvx-gui
+```
+
 ## Other commands
 
 | Task | Example | Details |
@@ -47,11 +53,11 @@ explains output paths, shared options, exit codes, and reports.
 Run the checks and build:
 
 ```sh
-uv sync
+uv sync --extra ui
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run pyright
-uv run pytest
+uv run --extra ui pytest
 uv build
 ```
 

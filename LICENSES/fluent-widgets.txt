@@ -1,0 +1,8 @@
+Optional GUI dependency: PySide6-Fluent-Widgets
+Copyright (c) 2021 zhiyiYo
+Upstream: https://github.com/zhiyiYo/PyQt-Fluent-Widgets/tree/PySide6
+License: GNU General Public License version 3 (GPLv3)
+License text: https://github.com/zhiyiYo/PyQt-Fluent-Widgets/blob/PySide6/LICENSE
+
+The dependency distribution includes the complete GPLv3 license text. Upstream
+also offers a separate commercial license: https://qfluentwidgets.com/price

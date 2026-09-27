@@ -348,6 +348,60 @@ def _stub_package_media(monkeypatch: pytest.MonkeyPatch) -> _PackageMusic:
     return music
 
 
+def test_manager_kson_preparation_uses_package_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ksm2sdvx.packs.application import prepare_kson
+    from ksm2sdvx.packs.database import parse_database
+
+    manifest = _inputs(tmp_path)
+    _stub_package_media(monkeypatch)
+
+    def renderer(ffmpeg: str) -> _PackageRenderer:
+        return _PackageRenderer()
+
+    monkeypatch.setattr("ksm2sdvx.pipeline.build.NativeAudioRenderer", renderer)
+    prepared = prepare_kson(load_package_config(manifest), tmp_path / "prepared")
+    song = parse_database(prepared.database).songs[0]
+    assert song.song_id == 3000
+    assert any(asset.relative.endswith("_3e.vox") for asset in prepared.assets)
+    assert any(asset.relative.endswith("_3e.s3v") for asset in prepared.assets)
+    assert all(asset.source.is_relative_to(tmp_path / "prepared") for asset in prepared.assets)
+    assert not (tmp_path / "data_mods").exists()
+
+
+@pytest.mark.parametrize("cancel_stage", ["Encoding preview", "Rendering exhaust"])
+def test_package_cancellation_between_media_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cancel_stage: str
+) -> None:
+    from threading import Event
+
+    from ksm2sdvx.common.jobs import JobCancelled, JobControl, Progress
+
+    manifest = _inputs(tmp_path)
+    music = _stub_package_media(monkeypatch)
+    renderer = _PackageRenderer()
+    event = Event()
+
+    def progress(value: Progress) -> None:
+        if value.stage.startswith(cancel_stage):
+            event.set()
+
+    with pytest.raises(JobCancelled):
+        build_package(
+            load_package_config(manifest),
+            destination=tmp_path / "output",
+            options=ConversionOptions(),
+            profile=DEFAULT_PROFILE,
+            renderer=renderer,
+            control=JobControl(event, progress),
+        )
+    assert len(music.previews) == 1
+    assert len(renderer.requests) == (1 if cancel_stage.startswith("Rendering") else 0)
+    assert not music.full
+    assert not (tmp_path / "output").exists()
+
+
 def test_package_ignores_source_presentation_and_reports_metadata_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
