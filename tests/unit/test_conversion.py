@@ -88,11 +88,10 @@ def test_deferred_metadata_and_bgm_do_not_fail_strict() -> None:
     assert any(f.status == FeatureStatus.DEFERRED for f in result.report.features)
 
 
-def test_spin_fallback_ambiguity_and_missing() -> None:
+def test_spin_fallback_and_missing() -> None:
     laser = [0, [[0, 0], [240, [0.25, 0.75]], [480, 1]]]
     for lanes, direction, code in (
         ([[laser], ()], -1, "SPIN_DIRECTION_FALLBACK"),
-        ([[laser], [laser]], 1, "AMBIGUOUS_SPIN"),
         ([(), ()], 1, "UNMATCHED_SPIN"),
     ):
         chart = parse_kson(

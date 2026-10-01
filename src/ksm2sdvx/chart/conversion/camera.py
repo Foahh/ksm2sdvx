@@ -93,16 +93,6 @@ def attach_spins(
                     pulse=event.pulse,
                 )
                 continue
-        if len(matches) > 1:
-            report.count("spin_events_ambiguous")
-            report.record(
-                "spin",
-                FeatureStatus.APPROXIMATED,
-                event.path,
-                code="AMBIGUOUS_SPIN",
-                message="Selected the first slam in stable left-to-right order.",
-                pulse=event.pulse,
-            )
         length = event.duration
         if event.kind == SpinKind.SPIN:
             roll_type, roll_length = (

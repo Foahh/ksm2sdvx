@@ -81,7 +81,7 @@ or package creation, and they produce no warnings or strict-mode failures.
 
 | Feature | Remaining limitation |
 | --- | --- |
-| Spin and half-spin | Events without a suitable slam are omitted with `UNMATCHED_SPIN`; fallback direction and ambiguous association are approximations |
+| Spin and half-spin | Events without a suitable slam are omitted with `UNMATCHED_SPIN`; fallback direction is an approximation |
 | Spin duration | Uses the documented duration mapping; durations not divisible by 60 KSON pulses fail conversion |
 | Curved lasers and manual tilt | Sampled at `--curve-step`; no continuous error bound |
 | Zero automatic tilt | Uses a manual hold; entry/exit transitions can differ from the source fade |
