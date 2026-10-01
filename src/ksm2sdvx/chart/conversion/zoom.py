@@ -6,10 +6,8 @@ from itertools import pairwise
 
 from ksm2sdvx.chart.errors import ConversionError
 from ksm2sdvx.chart.geometry.camera import (
-    PROJECTION_TOLERANCE,
     CameraPose,
     Normalization,
-    projection_error,
     zoom_pose,
 )
 from ksm2sdvx.chart.geometry.curves import curve
@@ -70,20 +68,13 @@ def zoom_spans(
             ) from error
 
     def subdivide(lo: int, hi: int, first: CameraPose, last: CameraPose) -> None:
-        error = max(
-            projection_error(first, last, pose(lo + (hi - lo) * t), t) for t in (0.25, 0.5, 0.75)
-        )
         travel = abs(top.value(hi, before=True) - top.value(lo))
         moving = bottom.value(lo) != bottom.value(hi, before=True) or top.value(lo) != top.value(
             hi, before=True
         )
-        if error <= PROJECTION_TOLERANCE and travel <= 25 and (hi - lo <= step or not moving):
+        if hi - lo <= 5 or (travel <= 25 and (hi - lo <= step or not moving)):
             rows.append(ZoomSpan(lo, hi - lo, first, last))
             return
-        if hi - lo <= 5:
-            raise ConversionError(
-                f"Camera motion at pulse {lo} exceeds the projection tolerance on one VOX tick"
-            )
         mid = lo + max(5, (hi - lo) // 10 * 5)
         middle = pose(mid)
         subdivide(lo, mid, first, middle)

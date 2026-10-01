@@ -164,7 +164,7 @@ def test_isolated_zoom_value_is_initialized_and_held_before_first_point() -> Non
     )
 
 
-def test_nonlinear_motion_is_checked_in_physical_interpolation_space() -> None:
+def test_nonlinear_motion_retains_sampled_endpoint_poses() -> None:
     bottom = (
         GraphPoint(KsonPulse(0), -50, -50, CurveControl(0.2, 0.8)),
         GraphPoint(KsonPulse(960), 150, 150),
@@ -172,19 +172,17 @@ def test_nonlinear_motion_is_checked_in_physical_interpolation_space() -> None:
     top = (GraphPoint(KsonPulse(0), -100, -100), GraphPoint(KsonPulse(960), 200, 200))
     rows = zoom_spans(bottom, top, RADIUS, ROTATION, 15)
     bg, tg = ZoomGraph(bottom), ZoomGraph(top)
-    for row in rows:
-        if not row.duration:
-            continue
+    moving = [row for row in rows if row.duration]
+    assert moving[0].pulse == 0
+    assert moving[-1].pulse + moving[-1].duration == 960
+    for first, following in pairwise(moving):
+        assert first.pulse + first.duration == following.pulse
+        assert first.end == following.start
+    for row in moving:
         assert row.duration <= 15 and row.duration % 5 == 0
-        # Interpolate decoded endpoints, as a target reader does after serialization.
-        r0, r1 = (RADIUS.decode(round(RADIUS.encode(p.radius), 9)) for p in (row.start, row.end))
-        a0, a1 = (ROTATION.decode(round(ROTATION.encode(p.pitch), 9)) for p in (row.start, row.end))
-        for i in range(1, 16):
-            t = i / 16
-            pulse = row.pulse + t * row.duration
+        for pulse, actual in ((row.pulse, row.start), (row.pulse + row.duration, row.end)):
             expected = zoom_pose(bg.value(pulse), tg.value(pulse), RADIUS, ROTATION)
-            actual = target_landmarks(r0 + (r1 - r0) * t, a0 + (a1 - a0) * t)
-            assert max(abs(actual[0] - expected.width), abs(actual[1] - expected.height)) < 0.251
+            assert actual == expected
 
 
 def test_zero_crossing_retains_grid_knots() -> None:
@@ -199,9 +197,29 @@ def test_top_turn_does_not_alias_matching_endpoints() -> None:
         camera_result({"cam": {"body": {"zoom_top": [[0, 0], [960, 2400]]}}})
 
 
-def test_fast_zoom_that_exceeds_tick_precision_is_rejected() -> None:
-    with pytest.raises(ConversionError, match="one VOX tick"):
-        camera_result({"cam": {"body": {"zoom_bottom": [[0, 0], [5, 300]]}}})
+@pytest.mark.parametrize("duration", [5, 15])
+def test_fast_bottom_zoom_retains_endpoint_motion(duration: int) -> None:
+    result = camera_result({"cam": {"body": {"zoom_bottom": [[0, 0], [duration, 300]]}}})
+    (radius,) = spans(result, ControllerName.RADIUS)
+    (angle,) = spans(result, ControllerName.ROTATION_X)
+    assert radius.duration == angle.duration == duration // 5
+    assert (radius.start_value, angle.start_value) == pytest.approx((0, 0))
+    expected = zoom_pose(300, 0, RADIUS, ROTATION)
+    assert RADIUS.decode(radius.end_value) == pytest.approx(expected.radius)
+    assert ROTATION.decode(angle.end_value) == pytest.approx(expected.pitch)
+    assert serialize_vox(result.chart)
+
+
+def test_fast_top_zoom_retains_endpoint_motion_at_one_tick() -> None:
+    result = camera_result({"cam": {"body": {"zoom_top": [[0, 0], [5, 100]]}}})
+    (radius,) = spans(result, ControllerName.RADIUS)
+    (angle,) = spans(result, ControllerName.ROTATION_X)
+    assert radius.duration == angle.duration == 1
+    assert (radius.start_value, angle.start_value) == pytest.approx((0, 0))
+    expected = zoom_pose(0, 100, RADIUS, ROTATION)
+    assert RADIUS.decode(radius.end_value) == pytest.approx(expected.radius)
+    assert ROTATION.decode(angle.end_value) == pytest.approx(expected.pitch)
+    assert serialize_vox(result.chart)
 
 
 @pytest.mark.parametrize("turn", [-72, -36, 36, 72])

@@ -11,7 +11,6 @@ from struct import pack, unpack
 from ksm2sdvx.chart.errors import ConversionError
 
 MANUAL_TILT_SCALE = -8 / 19
-PROJECTION_TOLERANCE = 0.25
 
 
 def _float32(value: float) -> float:
@@ -134,13 +133,3 @@ def zoom_pose(
     rotation.encode(pitch)
     target_landmarks(distance, pitch)
     return CameraPose(distance, pitch, width, height)
-
-
-def projection_error(
-    start: CameraPose, end: CameraPose, wanted: CameraPose, amount: float
-) -> float:
-    width, height = target_landmarks(
-        start.radius + amount * (end.radius - start.radius),
-        start.pitch + amount * (end.pitch - start.pitch),
-    )
-    return max(abs(width - wanted.width), abs(height - wanted.height))

@@ -107,12 +107,11 @@ geometry crossing the camera plane, reversed lanes, an unavailable judgment-row
 intersection, and unreachable target projections fail with the pulse and values.
 Values are not clamped or extended using a fitted line.
 
-Moving zoom spans are at most `--curve-step` pulses long and are refined until
-quarter-, half- and three-quarter-span landmark errors are at most 0.25 pixels
-in the reference projection. This is a sampled numerical tolerance, not a
-continuous or playback error guarantee. Failure to meet it on the five-pulse
-grid rejects conversion. Both controls share sampling times; changing one can
-also adjust the other. Initial and isolated zoom values are retained.
+Moving zoom spans are at most `--curve-step` pulses long. Each span linearly
+connects the converted camera poses at its endpoints. Large top-angle changes
+and bottom zero crossings can add sampling points on the five-pulse grid.
+Both controls share sampling times; changing one can also adjust the other.
+Initial and isolated zoom values are retained.
 
 ### Camera tilt
 
