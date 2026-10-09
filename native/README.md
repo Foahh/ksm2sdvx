@@ -58,8 +58,3 @@ channel count, sample rate, runtime versions, effect/keysound counts, the
 expected failure returns exit code 1 and a JSON `error` with `code` and `message`.
 Argument errors return 2. Diagnostic logs use stderr. The caller owns temporary
 output cleanup and atomic publication.
-
-Build with `BUILD_TESTING=ON` and run CTest to exercise the native renderer with
-generated audio. Tests cover every DSP family, frame boundaries, parameter
-precedence, laser jumps, offsets, chip retriggering, switched tracks, deterministic
-output, and invalid effect parameters.

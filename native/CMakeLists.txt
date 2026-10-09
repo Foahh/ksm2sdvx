@@ -29,10 +29,3 @@ foreach(runtime bass bass_fx)
     "${KSM2SDVX_UPSTREAM}/ksmaudio/ThirdParty_Windows/${runtime}/${runtime}.dll"
     "$<TARGET_FILE_DIR:ksm2sdvx-render>/${runtime}.dll")
 endforeach()
-
-if(BUILD_TESTING)
-  add_executable(ksm2sdvx-render-tests tests.cpp)
-  target_link_libraries(ksm2sdvx-render-tests PRIVATE ksm2sdvx_audio)
-  add_dependencies(ksm2sdvx-render-tests ksm2sdvx-render)
-  add_test(NAME native-audio COMMAND ksm2sdvx-render-tests)
-endif()

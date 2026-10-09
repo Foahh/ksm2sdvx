@@ -281,6 +281,7 @@ Synthetic golden fixtures and typed-model tests cover chart behavior. Inspection
 tests check resource handling and filesystem contents before and after execution.
 CLI integration tests cover command options, exit codes, and file output. Local
 verification includes lint, formatting, strict type checking, tests, and package
-builds. Media tests use generated images and audio, with real FFmpeg processing
-when available. WMA Professional encoding tests require Windows; tests never
-depend on an installed game or private reference assets.
+builds. Audio tests cover gain calculations, validation, and pipeline behavior
+with simulated processors. Jacket tests use generated images with real FFmpeg
+processing when available. Tests never depend on an installed game or private
+reference assets.

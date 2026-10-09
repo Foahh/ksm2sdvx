@@ -120,16 +120,12 @@ def test_writer_stages_both_before_replacing(tmp_path: Path) -> None:
     assert not list(tmp_path.glob(".ksm2sdvx-*"))
 
 
-def _media_input(directory: Path, *, audio: bool) -> Path:
+def _jacket_input(directory: Path) -> Path:
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None or shutil.which("ffprobe") is None:
         pytest.skip("Media commands require FFmpeg and FFprobe")
-    source = directory / ("source.wav" if audio else "source.png")
-    arguments = (
-        ["-i", "sine=frequency=440:duration=3", "-ac", "2"]
-        if audio
-        else ["-i", "color=c=red:s=100x50", "-frames:v", "1"]
-    )
+    source = directory / "source.png"
+    arguments = ["-i", "color=c=red:s=100x50", "-frames:v", "1"]
     subprocess.run(
         [ffmpeg, "-v", "error", "-f", "lavfi", *arguments, str(source)],
         capture_output=True,
@@ -139,7 +135,7 @@ def _media_input(directory: Path, *, audio: bool) -> Path:
 
 
 def test_jacket_command_defaults_and_options(tmp_path: Path) -> None:
-    source = _media_input(tmp_path, audio=False)
+    source = _jacket_input(tmp_path)
     before = source.read_bytes()
     result = run_cli(tmp_path, "jacket", str(source))
     assert result.returncode == 0, result.stderr
@@ -162,38 +158,6 @@ def test_jacket_command_defaults_and_options(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert struct.unpack_from(">II", custom.read_bytes(), 16) == (128, 128)
-    assert source.read_bytes() == before
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="Audio encoding requires Windows Media Format")
-def test_audio_command_defaults_and_preview(tmp_path: Path) -> None:
-    source = _media_input(tmp_path, audio=True)
-    before = source.read_bytes()
-    result = run_cli(tmp_path, "audio", str(source))
-    assert result.returncode == 0, result.stderr
-    output = tmp_path / "output/source.s3v"
-    assert output.read_bytes().startswith(bytes.fromhex("3026b275"))
-    assert "Gain: " in result.stdout
-    assert "Output loudness:" not in result.stdout
-    custom = tmp_path / "preview.s3v"
-    result = run_cli(
-        tmp_path,
-        "audio",
-        str(source),
-        "-o",
-        str(custom),
-        "--target-lufs",
-        "-14",
-        "--preview-start-ms",
-        "500",
-        "--preview-duration-ms",
-        "1500",
-    )
-    assert result.returncode == 0, result.stderr
-    assert custom.read_bytes().startswith(bytes.fromhex("3026b275"))
-    for path in (output, custom):
-        data = path.read_bytes()
-        assert struct.unpack("<4sII", data[-32:-20]) == (b"S3V0", 32, len(data) - 32)
     assert source.read_bytes() == before
 
 

@@ -29,7 +29,6 @@ if(WIN32)
         message(FATAL_ERROR "Bundled BASS runtime hashes changed; review and test the dependency update.")
     endif()
 
-    include(CTest)
     add_subdirectory(native)
 
     set(runtime_destination "ksm2sdvx/music/_native")

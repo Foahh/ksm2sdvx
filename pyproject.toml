@@ -48,9 +48,6 @@ sdist.include = [
 ]
 sdist.exclude = ["**/__pycache__/**", "**/*.pyc", "/docs/analysis/**", "/.cache/**", "/build/**"]
 
-[tool.scikit-build.cmake.define]
-BUILD_TESTING = "OFF"
-
 [tool.pyright]
 include = ["src", "tests", "scripts"]
 pythonVersion = "3.14"

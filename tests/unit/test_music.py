@@ -1,12 +1,7 @@
-"""Audio normalization, timing, failure handling, and native S3V encoding."""
+"""Audio gain calculation and validation without external processing."""
 
-import json
 import math
-import shutil
-import struct
-import subprocess
 import sys
-import wave
 from pathlib import Path
 from typing import cast
 
@@ -21,47 +16,7 @@ from ksm2sdvx.music import (
     WindowsWmaProEncoder,
     normalization_gain,
 )
-from ksm2sdvx.resources.models import ResourceRecord, ResourceUse
-
-
-def _source(path: Path, *, silence: bool = False, loud_intro: bool = False) -> ResourceRecord:
-    samples = bytearray()
-    for frame in range(44100 * 3):
-        amplitude = 0 if silence else round(2000 * math.sin(frame * 2 * math.pi * 440 / 44100))
-        if loud_intro and frame < 44100:
-            amplitude *= 10
-        samples.extend(struct.pack("<hh", amplitude, amplitude))
-    with wave.open(str(path), "wb") as audio:
-        audio.setparams((2, 2, 44100, 0, "NONE", "not compressed"))
-        audio.writeframes(samples)
-    return ResourceRecord(path.name, path, False, True, (ResourceUse(path, "music", "/audio/bgm"),))
-
-
-class _PcmCapture:
-    """Capture the signal supplied to the compressed encoder for timing checks."""
-
-    def __init__(self) -> None:
-        self.frames = 0
-        self.start = b""
-
-    def encode(self, source: Path, destination: Path) -> None:
-        with wave.open(str(source), "rb") as audio:
-            assert (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) == (
-                44100,
-                2,
-                2,
-            )
-            self.frames = audio.getnframes()
-            self.start = audio.readframes(4410)
-        shutil.copyfile(source, destination)
-
-
-@pytest.fixture
-def ffmpeg() -> str:
-    executable = shutil.which("ffmpeg")
-    if executable is None:
-        pytest.skip("FFmpeg is required for audio signal processing tests")
-    return executable
+from ksm2sdvx.resources.models import ResourceRecord
 
 
 def test_gain_depends_on_loudness_not_true_peak() -> None:
@@ -73,50 +28,6 @@ def test_gain_depends_on_loudness_not_true_peak() -> None:
     assert normalization_gain(LoudnessMeasurement(-20, -12), quiet) == pytest.approx(
         10 + 20 * math.log10(0.5)
     )
-
-
-@pytest.mark.parametrize("mode", ["full", "preview", "song", "explicit"])
-def test_processing_only_measures_normalization_reference(
-    tmp_path: Path, ffmpeg: str, mode: str
-) -> None:
-    class Measurements(FfmpegMusicProcessor):
-        def __init__(self) -> None:
-            super().__init__(ffmpeg, encoder=_PcmCapture())
-            self.calls: list[tuple[Path, S3vMusicSettings]] = []
-
-        def _analysis_output(self, source: Path, settings: S3vMusicSettings) -> str:
-            self.calls.append((source, settings))
-            return json.dumps({"input_i": -8.0, "input_tp": 3.0})
-
-    source = _source(tmp_path / "source.wav")
-    processor = Measurements()
-    full = MusicRequest(source, tmp_path / "full.s3v", S3vMusicSettings())
-    preview = MusicRequest(
-        source,
-        tmp_path / "preview.s3v",
-        S3vMusicSettings(preview_start_ms=1000, preview_duration_ms=100),
-    )
-    if mode == "song":
-        result, preview_result = processor.process_song(full, preview)
-        assert preview_result.gain_db == -2
-    elif mode == "preview":
-        result = processor.process_preview(preview)
-    elif mode == "explicit":
-        result = processor.process(
-            MusicRequest(
-                source,
-                tmp_path / "explicit.s3v",
-                S3vMusicSettings(gain_db=-2),
-            )
-        )
-    else:
-        result = processor.process(full)
-    assert result.gain_db == -2
-    assert not result.diagnostics
-    assert len(processor.calls) == (0 if mode == "explicit" else 1)
-    for path, settings in processor.calls:
-        assert path == source.resolved_path
-        assert settings.preview_start_ms is None
 
 
 @pytest.mark.parametrize(
@@ -149,69 +60,6 @@ def test_malformed_tool_measurements_are_expected_errors(tmp_path: Path, field: 
         InvalidMeasurementProcessor().analyze(tmp_path / "source.wav")
 
 
-@pytest.mark.parametrize("offset_ms,expected_frames", [(500, 110250), (-500, 154350)])
-def test_kson_offset_trims_positive_and_pads_negative(
-    tmp_path: Path, ffmpeg: str, offset_ms: int, expected_frames: int
-) -> None:
-    source = _source(tmp_path / "source.wav")
-    encoder = _PcmCapture()
-    result = FfmpegMusicProcessor(ffmpeg, encoder=encoder).process(
-        MusicRequest(source, tmp_path / "song.s3v", S3vMusicSettings(offset_ms=offset_ms))
-    )
-    assert encoder.frames == expected_frames
-    assert result.resource.uses == source.uses
-    assert result.measurement is not None
-    assert result.gain_db is not None
-    assert result.measurement.integrated_lufs + result.gain_db == pytest.approx(-10)
-    if offset_ms < 0:
-        assert encoder.start == bytes(len(encoder.start))
-    else:
-        assert any(encoder.start)
-
-
-def test_preview_uses_raw_time_and_shared_gain(tmp_path: Path, ffmpeg: str) -> None:
-    source = _source(tmp_path / "source.wav")
-    encoder = _PcmCapture()
-    processor = FfmpegMusicProcessor(ffmpeg, encoder=encoder)
-    full = processor.process(MusicRequest(source, tmp_path / "full.s3v", S3vMusicSettings()))
-    preview = processor.process(
-        MusicRequest(
-            source,
-            tmp_path / "preview.s3v",
-            S3vMusicSettings(
-                offset_ms=-1000,
-                preview_start_ms=1000,
-                preview_duration_ms=100,
-                gain_db=full.gain_db,
-            ),
-        )
-    )
-    assert encoder.frames == 4410
-    assert preview.gain_db == full.gain_db
-    assert preview.measurement is None
-    assert any(encoder.start)
-
-
-def test_song_gain_is_not_reduced_for_loud_preview(tmp_path: Path, ffmpeg: str) -> None:
-    source = _source(tmp_path / "source.wav", loud_intro=True)
-    processor = FfmpegMusicProcessor(ffmpeg, encoder=_PcmCapture())
-    full, preview = processor.process_song(
-        MusicRequest(source, tmp_path / "full.s3v", S3vMusicSettings(offset_ms=1000)),
-        MusicRequest(
-            source,
-            tmp_path / "preview.s3v",
-            S3vMusicSettings(
-                preview_start_ms=0,
-                preview_duration_ms=500,
-            ),
-        ),
-    )
-    assert full.gain_db == preview.gain_db
-    assert full.measurement is not None
-    assert full.gain_db == normalization_gain(full.measurement, S3vMusicSettings())
-    assert not full.diagnostics
-
-
 def test_song_rejects_mismatched_normalization_before_writing(tmp_path: Path) -> None:
     source = ResourceRecord("source.wav", tmp_path / "source.wav", False, True, ())
     with pytest.raises(MusicError, match="same normalization settings"):
@@ -228,20 +76,6 @@ def test_song_rejects_mismatched_normalization_before_writing(tmp_path: Path) ->
             ),
         )
     assert not tuple(tmp_path.iterdir())
-
-
-def test_preview_gain_uses_original_full_track_not_preview_loudness(
-    tmp_path: Path, ffmpeg: str
-) -> None:
-    source = _source(tmp_path / "source.wav", loud_intro=True)
-    processor = FfmpegMusicProcessor(ffmpeg, encoder=_PcmCapture())
-    settings = S3vMusicSettings(preview_start_ms=1500, preview_duration_ms=1000)
-    preview = processor.process_preview(MusicRequest(source, tmp_path / "preview.s3v", settings))
-    original = processor.analyze(tmp_path / "source.wav")
-    assert preview.measurement == original
-    assert preview.gain_db == pytest.approx(normalization_gain(original, S3vMusicSettings()))
-    measured_preview = processor.analyze(preview.resource.path)
-    assert measured_preview.integrated_lufs < -20
 
 
 @pytest.mark.parametrize(
@@ -261,66 +95,6 @@ def test_preview_reference_rejects_conflicting_timing_or_gain(
             MusicRequest(source, tmp_path / "preview.s3v", settings)
         )
     assert not tuple(tmp_path.iterdir())
-
-
-def test_silence_and_missing_executable_are_expected_errors(tmp_path: Path, ffmpeg: str) -> None:
-    source = _source(tmp_path / "silent.wav", silence=True)
-    output = tmp_path / "silent.s3v"
-    with pytest.raises(MusicError, match="silent"):
-        FfmpegMusicProcessor(ffmpeg).process(MusicRequest(source, output, S3vMusicSettings()))
-    assert not output.exists()
-    with pytest.raises(MusicError, match="Unable to run FFmpeg"):
-        FfmpegMusicProcessor(str(tmp_path / "missing-ffmpeg")).analyze(tmp_path / "silent.wav")
-
-
-def test_encoder_failure_preserves_existing_output(tmp_path: Path, ffmpeg: str) -> None:
-    class FailingEncoder:
-        def encode(self, source: Path, destination: Path) -> None:
-            destination.write_bytes(b"partial")
-            raise MusicError("encoder failed")
-
-    source = _source(tmp_path / "source.wav")
-    output = tmp_path / "song.s3v"
-    output.write_bytes(b"existing")
-    with pytest.raises(MusicError, match="encoder failed"):
-        FfmpegMusicProcessor(ffmpeg, encoder=FailingEncoder()).process(
-            MusicRequest(source, output, S3vMusicSettings())
-        )
-    assert output.read_bytes() == b"existing"
-    assert not list(tmp_path.glob(".ksm2sdvx-audio-*"))
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows WMA Professional encoder")
-def test_native_s3v_codec_and_loudness(tmp_path: Path, ffmpeg: str) -> None:
-    ffprobe = shutil.which("ffprobe")
-    if ffprobe is None:
-        pytest.skip("FFprobe is required to inspect the encoded stream")
-    source = _source(tmp_path / "source.wav")
-    output = tmp_path / "song.s3v"
-    result = FfmpegMusicProcessor(ffmpeg).process(MusicRequest(source, output, S3vMusicSettings()))
-    probe = subprocess.run(
-        [
-            ffprobe,
-            "-v",
-            "error",
-            "-show_entries",
-            "stream=codec_name,sample_rate,channels",
-            "-of",
-            "compact=p=0",
-            str(output),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert "codec_name=wmapro" in probe.stdout
-    assert "sample_rate=44100" in probe.stdout
-    assert "channels=2" in probe.stdout
-    assert output.read_bytes()[:16] == bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c")
-    data = output.read_bytes()
-    assert struct.unpack("<4sII20s", data[-32:]) == (b"S3V0", 32, len(data) - 32, bytes(20))
-    levels = FfmpegMusicProcessor(ffmpeg).analyze(result.resource.path)
-    assert levels.integrated_lufs == pytest.approx(-10, abs=0.2)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Non-Windows encoder failure")

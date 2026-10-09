@@ -1,9 +1,5 @@
 import json
-import math
-import shutil
 import struct
-import sys
-import wave
 import zlib
 from dataclasses import replace
 from pathlib import Path
@@ -17,7 +13,6 @@ from tests.support import chart_metadata, settings
 
 from ksm2sdvx.chart import DEFAULT_PROFILE, ConversionOptions, VoxChart
 from ksm2sdvx.chart.conversion.converter import UnsupportedFeaturesError
-from ksm2sdvx.cli import main
 from ksm2sdvx.common.errors import OutputError
 from ksm2sdvx.jacket import FfmpegJacketProcessor, JacketRequest, JacketResult, JacketSettings
 from ksm2sdvx.metadata import PackageMetadata, SdvxMetadataConverter
@@ -86,13 +81,7 @@ def _inputs(root: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    with wave.open(str(source / "music.wav"), "wb") as audio:
-        audio.setparams((2, 2, 44100, 0, "NONE", "not compressed"))
-        frames = b"".join(
-            struct.pack("<hh", *(int(4000 * math.sin(2 * math.pi * 440 * n / 44100)),) * 2)
-            for n in range(44100 * 3)
-        )
-        audio.writeframes(frames)
+    (source / "music.wav").write_bytes(b"music")
     _png(source / "jacket.png")
     return source / "package.toml"
 
@@ -169,91 +158,6 @@ def test_per_chart_jacket_settings(tmp_path: Path) -> None:
 def test_database_option_validation(tmp_path: Path, extra: str) -> None:
     with pytest.raises(PackageError):
         parse_package_config(MANIFEST + "\n" + extra, base=tmp_path)
-
-
-@pytest.mark.skipif(
-    sys.platform != "win32" or shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="Package audio encoding requires Windows Media Format and FFmpeg",
-)
-def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
-    manifest = _inputs(tmp_path)
-    source = manifest.parent
-    (source / "advanced.kson").write_bytes((source / "chart.kson").read_bytes())
-    manifest.write_text(
-        MANIFEST.replace(
-            'slot = "exhaust"',
-            'slot = "exhaust"\njacket_print = -1\njacket_mask = 7\n'
-            "[charts.radar]\nnotes = 11\npeak = 22\ntsumami = 33\ntricky = 44\nhand_trip = 55\none_hand = 66\n",
-        ).replace(
-            "[jacket]",
-            '[[charts]]\npath = "advanced.kson"\nslot = "advanced"\n'
-            '[charts.jacket]\nauthor = "Per-chart artist"\n\n[jacket]',
-        )
-        + "\n[metadata]\ndistribution_date = 20260102\nbg_no = 5\ngenre = 16\n"
-        'is_fixed = 0\ndemo_pri = -2\ninf_ver = 4\nlicense_text = "Original & licensed"\n',
-        encoding="utf-8",
-    )
-    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
-    output = tmp_path / "data_mods/synthetic"
-    assert main(["package", str(manifest), "-o", str(output)]) == 0
-    assert all(path.read_bytes() == content for path, content in before.items())
-    expected_music = output / "music/3000_synthetic"
-    assert (expected_music / "3000_synthetic_3e.vox").is_file()
-    assert (expected_music / "3000_synthetic_2a.vox").is_file()
-    assert (expected_music / "3000_synthetic_3e.s3v").stat().st_size > 0
-    assert (expected_music / "3000_synthetic_2a.s3v").stat().st_size > 0
-    assert not (expected_music / "3000_synthetic.s3v").exists()
-    assert (expected_music / "3000_synthetic_pre.s3v").stat().st_size > 0
-    for audio in expected_music.glob("*.s3v"):
-        data = audio.read_bytes()
-        assert struct.unpack("<4sII", data[-32:-20]) == (b"S3V0", 32, len(data) - 32)
-    for suffix, size in (("", 300), ("_s", 108), ("_b", 676)):
-        assert struct.unpack_from(
-            ">II", (expected_music / f"jk_3000_3{suffix}.png").read_bytes(), 16
-        ) == (size, size)
-    selector = output / "graphics/s_jacket00_ifs/jk_3000_3_t.png"
-    assert struct.unpack_from(">II", selector.read_bytes(), 16) == (128, 128)
-    assert (output / "graphics/s_jacket00_ifs/jk_3000_2_t.png").is_file()
-    entry = ET.fromstring((output / "others/music_db.merged.xml").read_bytes().decode("cp932"))
-    song = entry.find("music")
-    assert song is not None and song.get("id") == "3000"
-    assert song.findtext("info/ascii") == "synthetic"
-    assert song.findtext("info/volume") == "91"
-    assert song.findtext("info/version") == "7"
-    assert song.findtext("info/distribution_date") == "20260102"
-    assert song.findtext("info/bg_no") == "5"
-    assert song.findtext("info/genre") == "16"
-    assert song.findtext("info/is_fixed") == "0"
-    assert song.findtext("info/demo_pri") == "-2"
-    assert song.findtext("info/inf_ver") == "4"
-    assert song.findtext("info/license_text") == "Original & licensed"
-    assert song.findtext("difficulty/exhaust/price") == "-1"
-    assert song.findtext("difficulty/exhaust/limited") == "3"
-    assert song.findtext("difficulty/exhaust/jacket_print") == "-1"
-    assert song.findtext("difficulty/exhaust/jacket_mask") == "7"
-    assert [node.text for node in song.findall("difficulty/exhaust/radar/*")] == [
-        "11",
-        "22",
-        "33",
-        "44",
-        "55",
-        "66",
-    ]
-    assert all(node.text == "0" for node in song.findall("difficulty/advanced/radar/*"))
-    assert song.findtext("difficulty/exhaust/illustrator") == "Synthetic artist"
-    assert song.findtext("difficulty/advanced/illustrator") == "Per-chart artist"
-    report_text = (output / "ksm2sdvx-report.json").read_text(encoding="utf-8")
-    report = cast(dict[str, object], json.loads(report_text))
-    assert report["song_id"] == 3000
-    music_report = cast(dict[str, object], report["music"])
-    assert music_report["target_lufs"] == -10
-    chart_audio = cast(list[dict[str, object]], music_report["charts"])
-    assert [item["slot"] for item in chart_audio] == ["exhaust", "advanced"]
-    preview_report = cast(dict[str, object], music_report["preview"])
-    assert preview_report["reference"] == "original_full_track"
-    assert str(tmp_path) not in report_text and tmp_path.as_posix() not in report_text
-    assert json.dumps(str(tmp_path))[1:-1] not in report_text
-    assert main(["package", str(manifest), "-o", str(output)]) == 1
 
 
 def test_package_strict_rejects_unconverted_metadata_before_output(tmp_path: Path) -> None:

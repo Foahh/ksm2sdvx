@@ -61,14 +61,6 @@ uv run --extra ui pytest
 uv build
 ```
 
-Native tests:
-
-```sh
-cmake -S . -B build/native -DBUILD_TESTING=ON
-cmake --build build/native --config Release
-ctest --test-dir build/native -C Release --output-on-failure
-```
-
 Related projects:
 
 - [vox2ksh](https://github.com/whiteou7/vox2ksh)
