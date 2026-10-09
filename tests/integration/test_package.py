@@ -135,7 +135,7 @@ def test_manifest_paths_and_overrides(tmp_path: Path, monkeypatch: pytest.Monkey
     assert config.jacket.source == source / "art/jacket.png"
     assert config.jacket.author == "Synthetic artist"
     assert config.charts[0].price == -2 and config.charts[0].limited == 3
-    assert config.target_lufs == -11
+    assert config.target_lufs == -10
 
 
 def test_per_chart_jacket_settings(tmp_path: Path) -> None:
@@ -246,8 +246,7 @@ def test_package_cli_produces_media_metadata_and_charts(tmp_path: Path) -> None:
     report = cast(dict[str, object], json.loads(report_text))
     assert report["song_id"] == 3000
     music_report = cast(dict[str, object], report["music"])
-    assert music_report["target_lufs"] == -11
-    assert music_report["true_peak_dbtp"] == -1.0
+    assert music_report["target_lufs"] == -10
     chart_audio = cast(list[dict[str, object]], music_report["charts"])
     assert [item["slot"] for item in chart_audio] == ["exhaust", "advanced"]
     preview_report = cast(dict[str, object], music_report["preview"])

@@ -9,7 +9,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from ksm2sdvx.common.diagnostics import Diagnostic, Severity, Stage
 from ksm2sdvx.music._windows import WindowsWmaProEncoder
 from ksm2sdvx.music.errors import MusicError
 from ksm2sdvx.music.interfaces import S3vEncoder
@@ -35,25 +34,21 @@ def _finite_number(value: object, name: str) -> float:
 
 
 def normalization_gain(measurement: LoudnessMeasurement, settings: S3vMusicSettings) -> float:
-    """Use a single gain, retaining dynamics and respecting the measured peak."""
+    """Match integrated loudness with one constant gain."""
     _validate_settings(settings)
     loudness = _finite_number(measurement.integrated_lufs, "integrated loudness")
-    peak = _finite_number(measurement.true_peak_dbtp, "true peak")
     target = settings.target_lufs + 20 * math.log10(settings.source_volume)
-    return _finite_number(min(target - loudness, settings.true_peak_dbtp - peak), "audio gain")
+    return _finite_number(target - loudness, "audio gain")
 
 
 def _validate_settings(settings: S3vMusicSettings) -> None:
     for name, value in (
         ("target loudness", settings.target_lufs),
-        ("true peak ceiling", settings.true_peak_dbtp),
         ("source volume", settings.source_volume),
     ):
         _finite_number(value, name)
     if not -70 <= settings.target_lufs <= 0:
         raise MusicError("Target loudness must be between -70 and 0 LUFS")
-    if not -20 <= settings.true_peak_dbtp <= 0:
-        raise MusicError("True peak ceiling must be between -20 and 0 dBTP")
     if settings.source_volume <= 0:
         raise MusicError("Audio volume must be positive for loudness normalization")
     if type(settings.offset_ms) is not int:
@@ -205,7 +200,7 @@ class FfmpegMusicProcessor:
         full: MusicRequest[S3vMusicSettings],
         preview: MusicRequest[S3vMusicSettings],
     ) -> tuple[MusicResult, MusicResult]:
-        """Choose one gain against the full track loudness and both segment peaks.
+        """Choose one gain from the full track loudness for both outputs.
 
         Requests must share a source and normalization settings. Each destination
         is staged independently; the package application stages the complete pair.
@@ -230,12 +225,10 @@ class FfmpegMusicProcessor:
             )
         full_normalization = (
             full.settings.target_lufs,
-            full.settings.true_peak_dbtp,
             full.settings.source_volume,
         )
         preview_normalization = (
             preview.settings.target_lufs,
-            preview.settings.true_peak_dbtp,
             preview.settings.source_volume,
         )
         if full_normalization != preview_normalization:
@@ -247,20 +240,13 @@ class FfmpegMusicProcessor:
         _request_paths(full)
         _request_paths(preview)
         measurement = self._analyze(source, full.settings)
-        preview_peak = _measurement_number(
-            _read_fields(self._analysis_output(source, preview.settings)), "input_tp"
-        )
-        gain = min(
-            normalization_gain(measurement, full.settings),
-            full.settings.true_peak_dbtp - preview_peak,
-        )
+        gain = normalization_gain(measurement, full.settings)
         full_result = self._process(
             replace(full, settings=replace(full.settings, gain_db=gain)),
             measurement=measurement,
-            peak=measurement.true_peak_dbtp,
         )
         preview_result = self._process(
-            replace(preview, settings=replace(preview.settings, gain_db=gain)), peak=preview_peak
+            replace(preview, settings=replace(preview.settings, gain_db=gain))
         )
         return full_result, preview_result
 
@@ -270,8 +256,8 @@ class FfmpegMusicProcessor:
     def process_preview(self, request: MusicRequest[S3vMusicSettings]) -> MusicResult:
         """Normalize a dry preview against its original full-track loudness.
 
-        The preview peak may reduce the gain. Chart offsets and rendered
-        difficulty measurements never influence this operation.
+        Chart offsets and rendered difficulty measurements never influence
+        this operation.
         """
         settings = request.settings
         _validate_settings(settings)
@@ -284,14 +270,8 @@ class FfmpegMusicProcessor:
             source,
             replace(settings, preview_start_ms=None, preview_duration_ms=None),
         )
-        preview_peak = _measurement_number(
-            _read_fields(self._analysis_output(source, settings)), "input_tp"
-        )
-        target = settings.target_lufs + 20 * math.log10(settings.source_volume)
-        gain = min(target - reference.integrated_lufs, settings.true_peak_dbtp - preview_peak)
-        result = self._process(
-            replace(request, settings=replace(settings, gain_db=gain)), peak=preview_peak
-        )
+        gain = normalization_gain(reference, settings)
+        result = self._process(replace(request, settings=replace(settings, gain_db=gain)))
         return replace(result, measurement=reference)
 
     def _process(
@@ -299,41 +279,16 @@ class FfmpegMusicProcessor:
         request: MusicRequest[S3vMusicSettings],
         *,
         measurement: LoudnessMeasurement | None = None,
-        peak: float | None = None,
     ) -> MusicResult:
         settings = request.settings
         _validate_settings(settings)
         source, destination = _request_paths(request)
-        if settings.gain_db is None or settings.preview_start_ms is None:
+        if settings.gain_db is None:
             if measurement is None:
                 measurement = self._analyze(source, settings)
-            peak = measurement.true_peak_dbtp
-            gain = (
-                normalization_gain(measurement, settings)
-                if settings.gain_db is None
-                else settings.gain_db
-            )
+            gain = normalization_gain(measurement, settings)
         else:
-            if peak is None:
-                peak = _measurement_number(
-                    _read_fields(self._analysis_output(source, settings)), "input_tp"
-                )
             gain = settings.gain_db
-        if peak + gain > settings.true_peak_dbtp + 0.05:
-            raise MusicError("The supplied shared audio gain exceeds the preview true-peak ceiling")
-        target = settings.target_lufs + 20 * math.log10(settings.source_volume)
-        diagnostics: list[Diagnostic] = []
-        if measurement is not None and measurement.integrated_lufs + gain < target - 1.0:
-            diagnostics.append(
-                Diagnostic(
-                    code="AUDIO_PEAK_LIMITED",
-                    severity=Severity.WARNING,
-                    stage=Stage.MUSIC,
-                    message=f"True-peak headroom limits output to approximately {measurement.integrated_lufs + gain:.2f} LUFS; requested {target:.2f} LUFS.",
-                    feature="audio.normalization",
-                    source_path=str(source),
-                )
-            )
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(
@@ -375,32 +330,11 @@ class FfmpegMusicProcessor:
                 self.encoder.encode(pcm, encoded)
                 if not encoded.is_file() or encoded.stat().st_size == 0:
                     raise MusicError("Audio encoder did not produce its output file")
-                encoded_analysis = self._analysis_output(encoded, S3vMusicSettings())
-                encoded_fields = _read_fields(encoded_analysis)
-                encoded_peak = _measurement_number(encoded_fields, "input_tp")
-                output_measurement = (
-                    _read_measurement(encoded_analysis)
-                    if measurement is not None or encoded_fields.get("input_i") != "-inf"
-                    else None
-                )
-                if encoded_peak >= 0 or encoded_peak > settings.true_peak_dbtp + 0.5:
-                    diagnostics.append(
-                        Diagnostic(
-                            code="AUDIO_CODEC_PEAK",
-                            severity=Severity.WARNING,
-                            stage=Stage.MUSIC,
-                            message=f"Lossy encoding raised true peak to {encoded_peak:.2f} dBTP; the {settings.true_peak_dbtp:.2f} dBTP ceiling bounds the signal before encoding.",
-                            feature="audio.normalization",
-                            source_path=str(source),
-                        )
-                    )
                 os.replace(encoded, destination)
         except OSError as exc:
             raise MusicError(f"Unable to write audio output: {exc}") from exc
         return MusicResult(
             ProcessedResource(destination, request.source.uses),
-            tuple(diagnostics),
-            measurement,
-            gain,
-            output_measurement,
+            measurement=measurement,
+            gain_db=gain,
         )

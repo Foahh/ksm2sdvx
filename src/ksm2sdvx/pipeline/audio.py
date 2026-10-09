@@ -36,12 +36,6 @@ def audio_measurements(result: MusicResult) -> dict[str, JsonValue]:
         "gain_db": result.gain_db,
         "measured_input_lufs": result.measurement.integrated_lufs if result.measurement else None,
         "measured_input_dbtp": result.measurement.true_peak_dbtp if result.measurement else None,
-        "measured_output_lufs": (
-            result.output_measurement.integrated_lufs if result.output_measurement else None
-        ),
-        "measured_output_dbtp": (
-            result.output_measurement.true_peak_dbtp if result.output_measurement else None
-        ),
     }
 
 
@@ -118,7 +112,6 @@ def _convert_chart_audio_file(
     output: Path | None,
     strict: bool,
     target_lufs: float,
-    true_peak_dbtp: float,
     gain_db: float | None,
     ffmpeg: str,
     renderer: AudioRenderer | None,
@@ -152,9 +145,7 @@ def _convert_chart_audio_file(
         raise MusicError("Audio output must not overwrite a source resource")
     if destination.is_dir() or report_path.is_dir():
         raise MusicError("Audio output or report destination is a directory")
-    settings = S3vMusicSettings(
-        target_lufs=target_lufs, true_peak_dbtp=true_peak_dbtp, gain_db=gain_db
-    )
+    settings = S3vMusicSettings(target_lufs=target_lufs, gain_db=gain_db)
     renderer = renderer if renderer is not None else NativeAudioRenderer(ffmpeg=ffmpeg)
     processor = processor if processor is not None else FfmpegMusicProcessor(ffmpeg)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +183,6 @@ def _convert_chart_audio_file(
             "unsupported": program.unsupported_paths,
             "normalization": {
                 "target_lufs": target_lufs,
-                "true_peak_dbtp": true_peak_dbtp,
                 **audio_measurements(music),
             },
             "diagnostics": tuple(d.to_dict() for d in diagnostics),
@@ -213,8 +203,7 @@ def convert_chart_audio_file(
     *,
     output: Path | None = None,
     strict: bool = False,
-    target_lufs: float = -11.0,
-    true_peak_dbtp: float = -1.0,
+    target_lufs: float = -10.0,
     gain_db: float | None = None,
     ffmpeg: str = "ffmpeg",
     renderer: AudioRenderer | None = None,
@@ -227,7 +216,6 @@ def convert_chart_audio_file(
             output=output,
             strict=strict,
             target_lufs=target_lufs,
-            true_peak_dbtp=true_peak_dbtp,
             gain_db=gain_db,
             ffmpeg=ffmpeg,
             renderer=renderer,

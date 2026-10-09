@@ -54,8 +54,7 @@ class PackageConfig:
     inf_ver: int | None = None
     license_text: str | None = None
     jacket: JacketConfig = JacketConfig()
-    target_lufs: float = -11.0
-    true_peak_dbtp: float = -1.0
+    target_lufs: float = -10.0
 
 
 def _table(value: object, location: str, allowed: set[str]) -> dict[str, object]:
@@ -241,7 +240,7 @@ def parse_package_config(text: str, *, base: Path) -> PackageConfig:
             "license_text",
         },
     )
-    music = _table(data.get("music", {}), "music", {"target_lufs", "true_peak_dbtp"})
+    music = _table(data.get("music", {}), "music", {"target_lufs"})
     return PackageConfig(
         name=name,
         root=root,
@@ -261,8 +260,7 @@ def parse_package_config(text: str, *, base: Path) -> PackageConfig:
         inf_ver=_integer(metadata, "inf_ver", 0, maximum=255) if "inf_ver" in metadata else None,
         license_text=_optional_string(metadata, "license_text"),
         jacket=_jacket_config(data.get("jacket", {}), root),
-        target_lufs=_number(music, "target_lufs", -11.0),
-        true_peak_dbtp=_number(music, "true_peak_dbtp", -1.0),
+        target_lufs=_number(music, "target_lufs", -10.0),
     )
 
 

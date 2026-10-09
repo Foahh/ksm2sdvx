@@ -200,7 +200,7 @@ validation before serialization.
 
 | Component | Implemented behavior | Limits |
 | --- | --- | --- |
-| Audio | ASF/WMA Professional, stereo 44.1 kHz, approximately 384 kb/s; default −11 LUFS through constant gain | Windows encoder required; peak headroom can prevent reaching the requested loudness |
+| Audio | ASF/WMA Professional, stereo 44.1 kHz, approximately 384 kb/s; default −10 LUFS through constant gain | Windows encoder required |
 | Chart audio | ksmaudio DSP effects, laser filters, switch-audio routing, file and built-in chip keysounds | Windows x64 renderer; custom slam sounds and legacy alternate-BGM routing are diagnosed |
 | Gameplay and preview | Each difficulty has separately rendered and normalized audio; preview comes from the original track | Baked effects are independent of player input; arcade slam feedback remains enabled |
 | Audio timing | Positive KSON offset trims, negative pads silence; previews use original audio coordinates | All charts in a package must share the music file, offset, volume and preview timing |

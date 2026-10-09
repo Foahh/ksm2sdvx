@@ -70,7 +70,7 @@ def test_chart_audio_uses_authored_timing_once_and_publishes_report(tmp_path: Pa
     assert renderer.requests[0].program.bgm_volume == 0.5
     settings = processor.requests[0].settings
     assert settings.offset_ms == 0 and settings.source_volume == 1
-    assert settings.target_lufs == -11 and settings.true_peak_dbtp == -1
+    assert settings.target_lufs == -10
     report = cast(dict[str, object], json.loads(result.report_path.read_text(encoding="utf-8")))
     assert report["source"] == chart.name
     assert str(tmp_path) not in result.report_path.read_text(encoding="utf-8")

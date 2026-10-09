@@ -233,9 +233,9 @@ rejects text that cannot be encoded. No reference database is required.
 bundled helper, and validates its response before publishing the PCM file.
 The helper uses ksmaudio's music stream and compressor chain from the pinned KSM
 submodule, with effects scheduled on an offline sample clock. Chip samples are
-mixed afterward; the final mix saturates at the signed PCM range before loudness
-measurement. Render receipts record the processing profile and saturated sample
-count. Presets and BASS libraries ship beside the executable.
+mixed afterward, retaining floating-point headroom before loudness measurement.
+Render receipts record the processing profile. Presets and BASS libraries ship
+beside the executable.
 
 The package pipeline renders and normalizes each difficulty separately, then
 disables native chart effects only after the render succeeds. Exact source
@@ -243,8 +243,8 @@ feature coverage resolves audio omissions before strict policy is enforced.
 Standalone chart conversion cannot claim that rendering has happened.
 
 `FfmpegMusicProcessor.process_preview` selects constant gain from the original
-full-track loudness and preview peak. Gameplay mixes each receive their own
-normalization, with a default target of −11 LUFS. Standalone `process` converts
+full-track loudness. Gameplay mixes each receive their own
+normalization, with a default target of −10 LUFS. Standalone `process` converts
 one requested interval. The Windows
 encoder produces WMA Professional audio, closes the ASF payload, then appends
 and validates the required S3V footer. Plain ASF files renamed to `.s3v` are not

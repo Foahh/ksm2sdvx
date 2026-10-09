@@ -619,7 +619,6 @@ Json render(const Json &request, const std::filesystem::path &destination) {
   };
   std::map<std::string, std::vector<Voice>> voices;
   std::size_t key_cursor = 0;
-  std::uint64_t saturated_samples = 0;
   std::array<bool, 2> previous_holds{};
   int last_pressed_lane = 0;
   WaveWriter output(destination, duration);
@@ -738,15 +737,9 @@ Json render(const Json &request, const std::filesystem::path &destination) {
       }
       ++it;
     }
-    // Match the signed PCM export range before loudness measurement. Keep the
-    // intermediate floating point so quieter samples are not quantized twice.
-    for (auto &value : selected) {
+    for (const auto value : selected) {
       if (!std::isfinite(value))
         throw RenderError("audio.nonfinite", "An effect produced non-finite audio.");
-      if (value < -1.0f || value > 1.0f) {
-        ++saturated_samples;
-        value = std::clamp(value, -1.0f, 1.0f);
-      }
     }
     output.append(selected);
     frame += count;
@@ -758,8 +751,7 @@ Json render(const Json &request, const std::filesystem::path &destination) {
           {"channels", 2},
           {"bass_version", version_string(BASS_GetVersion())},
           {"bass_fx_version", version_string(BASS_FX_GetVersion())},
-          {"processing_profile", "ksm-compressed-v1"},
-          {"saturated_samples", saturated_samples},
+          {"processing_profile", "ksm-compressed-v2"},
           {"effects", program.effects.size()},
           {"keysounds", program.keysounds.size()}};
 }

@@ -81,7 +81,7 @@ and resources, as described in its [conversion limits](package.md#conversion-lim
 
 | Command | Default output | Options |
 | --- | --- | --- |
-| `audio` | `output/<stem>.s3v`, or `output/<stem>_pre.s3v` for a preview | [Audio options and −11 LUFS normalization](media.md#audio) |
+| `audio` | `output/<stem>.s3v`, or `output/<stem>_pre.s3v` for a preview | [Audio options and −10 LUFS normalization](media.md#audio) |
 | `jacket` | `output/<stem>_<size>.png` | [Jacket sizes and image processing](media.md#jacket) |
 | `package` | `output/data_mods/<name>/` | [Package options and exhaustive TOML reference](package.md) |
 

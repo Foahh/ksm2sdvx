@@ -272,11 +272,8 @@ class NativeAudioRenderer:
                 ("bass_fx", _version(receipt, "bass_fx_version")),
             )
             profile = _version(receipt, "processing_profile")
-            if profile != "ksm-compressed-v1":
+            if profile != "ksm-compressed-v2":
                 raise MusicError("The audio renderer processing profile is unsupported")
-            saturated_samples = _count(receipt, "saturated_samples")
-            if saturated_samples > frames * 2:
-                raise MusicError("The audio renderer returned an invalid saturated_samples count")
             if not output.is_file() or output.stat().st_size < 44:
                 raise MusicError("The audio renderer did not produce its PCM output")
             _validate_pcm(output, frames)
@@ -289,5 +286,4 @@ class NativeAudioRenderer:
             effects,
             keysounds,
             profile,
-            saturated_samples,
         )

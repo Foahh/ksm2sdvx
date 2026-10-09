@@ -87,7 +87,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     output=args.output,
                     strict=args.strict,
                     target_lufs=args.target_lufs,
-                    true_peak_dbtp=args.true_peak_dbtp,
                     gain_db=args.gain_db,
                     ffmpeg=args.ffmpeg,
                 )

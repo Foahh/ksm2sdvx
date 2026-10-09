@@ -19,11 +19,10 @@ class S3vMusicSettings:
 
     Preview intervals refer to the original file and bypass the chart offset.
     A supplied gain reuses the main track's gain for its preview. Authored source
-    volume scales the normalization target, subject to the true-peak ceiling.
+    volume scales the normalization target.
     """
 
-    target_lufs: float = -11.0
-    true_peak_dbtp: float = -1.0
+    target_lufs: float = -10.0
     offset_ms: int = 0
     preview_start_ms: int | None = None
     preview_duration_ms: int | None = None
@@ -44,4 +43,3 @@ class MusicResult:
     diagnostics: tuple[Diagnostic, ...] = ()
     measurement: LoudnessMeasurement | None = None
     gain_db: float | None = None
-    output_measurement: LoudnessMeasurement | None = None

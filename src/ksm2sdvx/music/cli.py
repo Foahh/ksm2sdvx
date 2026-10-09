@@ -12,8 +12,7 @@ class AudioArguments(argparse.Namespace):
     source: Path = Path()
     output: Path | None = None
     ffmpeg: str = "ffmpeg"
-    target_lufs: float = -11.0
-    true_peak_dbtp: float = -1.0
+    target_lufs: float = -10.0
     preview_start_ms: int | None = None
     preview_duration_ms: int | None = None
     gain_db: float | None = None
@@ -30,7 +29,6 @@ def add_audio_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-o", "--output", type=Path, help="Output .s3v file")
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--target-lufs", type=float, default=defaults.target_lufs)
-    parser.add_argument("--true-peak-dbtp", type=float, default=defaults.true_peak_dbtp)
     parser.add_argument("--source-volume", type=float, dest="audio_source_volume")
     parser.add_argument(
         "--offset-ms",
@@ -50,7 +48,6 @@ def run_audio(args: AudioArguments) -> int:
         ffmpeg=args.ffmpeg,
         settings=S3vMusicSettings(
             target_lufs=args.target_lufs,
-            true_peak_dbtp=args.true_peak_dbtp,
             offset_ms=args.audio_offset_ms if args.audio_offset_ms is not None else 0,
             source_volume=args.audio_source_volume if args.audio_source_volume is not None else 1.0,
             preview_start_ms=args.preview_start_ms,
@@ -62,6 +59,4 @@ def run_audio(args: AudioArguments) -> int:
     print(f"Audio: {result.resource.path}")
     if result.gain_db is not None:
         print(f"Gain: {result.gain_db:.2f} dB")
-    if result.output_measurement is not None:
-        print(f"Output loudness: {result.output_measurement.integrated_lufs:.2f} LUFS")
     return 0

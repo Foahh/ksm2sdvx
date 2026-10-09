@@ -173,8 +173,8 @@ def test_audio_command_defaults_and_preview(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     output = tmp_path / "output/source.s3v"
     assert output.read_bytes().startswith(bytes.fromhex("3026b275"))
-    loudness = float(result.stdout.split("Output loudness: ")[1].split()[0])
-    assert loudness == pytest.approx(-11, abs=0.2)
+    assert "Gain: " in result.stdout
+    assert "Output loudness:" not in result.stdout
     custom = tmp_path / "preview.s3v"
     result = run_cli(
         tmp_path,
@@ -184,8 +184,6 @@ def test_audio_command_defaults_and_preview(tmp_path: Path) -> None:
         str(custom),
         "--target-lufs",
         "-14",
-        "--true-peak-dbtp",
-        "-2",
         "--preview-start-ms",
         "500",
         "--preview-duration-ms",

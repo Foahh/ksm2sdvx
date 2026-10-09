@@ -66,8 +66,6 @@ std::vector<float> stream_reference(const std::filesystem::path &path, std::size
     }
   }
   BASS_Free();
-  for (auto &value : result)
-    value = std::clamp(value, -1.0f, 1.0f);
   return result;
 }
 Json request(const std::filesystem::path &source) {
@@ -120,7 +118,7 @@ int main() {
     const auto base = request(source);
     const auto receipt = ksm2sdvx::render(base, output);
     require(receipt.at("frames") == 1024, "Wrong duration");
-    require(receipt.at("processing_profile") == "ksm-compressed-v1", "Wrong processing profile");
+    require(receipt.at("processing_profile") == "ksm-compressed-v2", "Wrong processing profile");
     const auto dry = stream_reference(source, 1024);
     require(output_wave(output, 1024) == dry, "Music does not use the upstream compressor chain");
     require(dry != original, "Music compressor and gain stages were bypassed");
@@ -275,11 +273,10 @@ int main() {
     auto loud_keys = keys;
     loud_keys["program"]["keysounds"] = {
         {{"frame", 101}, {"lane", 0}, {"resource_id", "chip"}, {"volume", 20}}};
-    const auto loud_receipt = ksm2sdvx::render(loud_keys, output);
-    const auto saturated = output_wave(output, 1024);
-    require(saturated[202] == 1 && saturated[402] == 0,
-            "Mixed keysounds did not saturate at the PCM export range");
-    require(loud_receipt.at("saturated_samples") == 200, "Wrong saturated sample count");
+    ksm2sdvx::render(loud_keys, output);
+    const auto loud_mix = output_wave(output, 1024);
+    require(loud_mix[202] == 2 && loud_mix[402] == 0,
+            "Mixed keysounds lost floating-point headroom");
 
     auto polyphonic = keys;
     polyphonic["program"]["key_sound_polyphony"] = 10;

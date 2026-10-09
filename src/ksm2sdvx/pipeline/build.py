@@ -348,7 +348,6 @@ def _build_package(
         silent_bank: ProcessedResource | None = None
         audio_settings = S3vMusicSettings(
             target_lufs=config.target_lufs,
-            true_peak_dbtp=config.true_peak_dbtp,
         )
         checkpoint(control, "Encoding preview; the current media operation must finish")
         preview = music_processor.process_preview(
@@ -504,7 +503,6 @@ def _build_package(
             ),
             "music": {
                 "target_lufs": config.target_lufs,
-                "true_peak_dbtp": config.true_peak_dbtp,
                 "charts": tuple(audio_reports),
                 "preview": {
                     "file": preview.resource.path.name,

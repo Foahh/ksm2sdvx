@@ -23,9 +23,9 @@ normalization and S3V encoding happen afterward in Python.
 Music uses ksmaudio's decode stream, including its 0.1 input gain and compressor
 (−24 dB threshold, 5:1 ratio, 1 ms attack, 20 ms release, +18 dB makeup).
 The stream applies authored BGM gain between higher-priority FX and laser filters.
-Chip samples are mixed after music compression. The completed mix saturates at
-−1/+1, matching signed PCM export, while retaining floating-point precision within
-that range. Final normalization applies one constant gain to this rendered mix.
+Chip samples are mixed after music compression. The completed mix retains
+floating-point headroom above full scale. Final normalization applies one
+constant gain to this rendered mix.
 
 ## Request and event timing
 
@@ -54,7 +54,7 @@ setting. When the pool is full, retriggering replaces its longest-playing voice.
 
 A successful call writes one JSON receipt to stdout containing PCM frame count,
 channel count, sample rate, runtime versions, effect/keysound counts, the
-`ksm-compressed-v1` processing profile, and saturated sample count. An
+`ksm-compressed-v2` processing profile. An
 expected failure returns exit code 1 and a JSON `error` with `code` and `message`.
 Argument errors return 2. Diagnostic logs use stderr. The caller owns temporary
 output cleanup and atomic publication.

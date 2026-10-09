@@ -12,7 +12,7 @@ encoding requires Windows with the Windows Media Format runtime. See the
 
 ```text
 uv run ksm2sdvx audio music.ogg -o output/music.s3v
-uv run ksm2sdvx audio music.ogg --target-lufs -11 --offset-ms 120
+uv run ksm2sdvx audio music.ogg --target-lufs -10 --offset-ms 120
 uv run ksm2sdvx audio music.ogg --preview-start-ms 30000 --preview-duration-ms 15000
 uv run ksm2sdvx audio --chart song/hard.kson --strict
 ```
@@ -27,27 +27,23 @@ stereo at 44.1 kHz and approximately 384 kb/s. The default path is
 | `--chart PATH` | None | Render effects and keysounds from a KSON chart instead of supplying `SOURCE` |
 | `--strict` | Off | With `--chart`, reject omitted audio features |
 | `-o PATH`, `--output PATH` | Path above | Select the `.s3v` file |
-| `--target-lufs NUMBER` | `-11` | Integrated loudness target, finite number from −70 to 0 LUFS |
-| `--true-peak-dbtp NUMBER` | `-1` | Peak ceiling before encoding, finite number from −20 to 0 dBTP |
+| `--target-lufs NUMBER` | `-10` | Integrated loudness target, finite number from −70 to 0 LUFS |
 | `--source-volume NUMBER` | `1` | Positive, finite amplitude multiplier applied to the loudness target |
 | `--offset-ms INTEGER` | `0` | Signed 32-bit milliseconds; positive trims the start, negative pads silence |
 | `--preview-start-ms INTEGER` | No preview | Start in the original audio, 0–2147483647 ms |
 | `--preview-duration-ms INTEGER` | No preview | Duration, 1–2147483647 ms; supply both preview arguments and leave offset at 0 |
-| `--gain-db NUMBER` | Calculated | Explicit finite constant gain, still checked against the measured peak ceiling |
+| `--gain-db NUMBER` | Calculated | Explicit finite constant gain |
 | `--ffmpeg EXECUTABLE` | `ffmpeg` | Select the FFmpeg executable |
 | `-h`, `--help` | — | Show audio command help |
 
 ### Loudness and previews
 
-Normalization applies a constant volume gain limited by the available peak
-headroom. The command prints the applied gain and measured output loudness when
-available. Lossy encoding can raise the decoded peak; any overshoot is reported.
-An independent preview uses its own measured loudness unless `--gain-db` is
-supplied. Package creation normalizes each rendered difficulty independently;
-its preview uses the original full-track loudness and the preview's peak headroom.
-An explicit gain that exceeds peak headroom fails; it is not silently reduced.
-Silent audio and intervals too short for the required measurement fail with an
-audio error. Supplying a gain for a short preview requires only a peak measurement.
+Normalization applies one constant gain calculated from the integrated loudness
+and the target. The command prints the applied gain. An independent preview uses
+its own measured loudness unless `--gain-db` is supplied. Package creation
+normalizes each rendered difficulty independently; its preview uses the original
+full-track loudness. Silent audio and intervals too short for loudness measurement
+fail with an audio error. An explicit gain bypasses loudness measurement.
 
 ### Chart audio
 
@@ -68,9 +64,9 @@ uses the TOML directory as its containment boundary.
 
 The renderer uses KSM's music effect and compressor chain, then mixes chip
 keysounds. BGM volume controls its level relative to keysounds. The completed mix
-saturates at the signed PCM output range before receiving one constant
-normalization gain. Reports identify the processing profile and count saturated
-samples. Effects follow the authored chart regardless of player input.
+retains floating-point headroom before receiving one constant normalization
+gain. Reports identify the processing profile. Effects follow the authored chart
+regardless of player input.
 Raw-audio conversion and original-audio previews do not use this compressor chain.
 Arcade slam feedback is retained rather than baked into the audio. Custom slam
 sounds, legacy alternate-BGM routing and unknown audio features are diagnosed;

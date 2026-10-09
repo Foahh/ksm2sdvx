@@ -53,7 +53,6 @@ class AudioRenderResult:
     effects: int = 0
     keysounds: int = 0
     processing_profile: str | None = None
-    saturated_samples: int = 0
 
     def to_dict(self) -> dict[str, JsonValue]:
         return {
@@ -64,7 +63,6 @@ class AudioRenderResult:
             "effects": self.effects,
             "keysounds": self.keysounds,
             "processing_profile": self.processing_profile,
-            "saturated_samples": self.saturated_samples,
             "diagnostics": tuple(d.to_dict() for d in self.diagnostics),
         }
 

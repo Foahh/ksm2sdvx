@@ -66,7 +66,7 @@ database's version field. JSON output reports have their own schema versions.
 | `song_id` | Required | Unused integer ID, 1–3071 for the supported target |
 | `charts` | At least one `[[charts]]` table | Explicit charts belonging to this song |
 | `metadata` | Optional table | Shared song metadata overrides |
-| `music` | Optional table | Loudness and peak settings |
+| `music` | Optional table | Loudness target |
 | `jacket` | Optional table | Shared artwork and credit overrides |
 
 Song ID conflicts are not checked. Choose an ID that avoids the game's existing
@@ -113,12 +113,11 @@ maximum are derived from all selected charts' BPM events, in exact hundredths.
 
 ### `[music]`
 
-Both fields are optional; omitting the table uses −11 LUFS and −1.0 dBTP.
+The field is optional; omitting the table uses −10 LUFS.
 
 | Field | Default | Meaning and constraints |
 | --- | --- | --- |
-| `target_lufs` | `-11` | Integrated loudness target, finite number from −70 to 0 LUFS |
-| `true_peak_dbtp` | `-1` | Peak ceiling before encoding, finite number from −20 to 0 dBTP |
+| `target_lufs` | `-10` | Integrated loudness target, finite number from −70 to 0 LUFS |
 
 Music paths, offsets, source volume and preview timing come from KSON, rather
 than TOML overrides:
@@ -200,14 +199,14 @@ Music and previews use ASF containers with WMA Professional audio and a 32-byte
 negative offsets add silence. Preview intervals refer to the original audio
 file. Each difficulty has its own rendered effects and keysounds, and receives
 its own normalization gain. Preview gain is based on the original full-track
-loudness and constrained by preview peak headroom.
+loudness.
 
-The default loudness target is **−11 LUFS**, configurable through
+The default loudness target is **−10 LUFS**, configurable through
 `music.target_lufs`. FFmpeg measures integrated loudness and true peak; a constant
-`volume` filter applies the smaller of the required loudness gain and available
-peak headroom. Normalization does not change dynamics. Chart rendering first
-uses KSM's music compressor, mixes chip samples, and saturates the mix at the
-signed PCM output range. KSON BGM volume sets its level relative to chip samples
+`volume` filter applies the gain calculated from the integrated loudness target.
+Chart rendering first uses KSM's music compressor and mixes chip samples,
+retaining floating-point headroom until normalization. KSON BGM volume sets its
+level relative to chip samples
 before normalization. The original-audio preview bypasses chart processing.
 A silent rendered mix cannot be normalized and fails with an audio error.
 
@@ -222,10 +221,8 @@ The Windows x64 package
 includes the audio renderer, BASS libraries, and five KSM chip presets; no KSM
 installation or runtime setup is required.
 
-`music.true_peak_dbtp` defaults to **−1 dBTP** and limits the signal before
-encoding. Lossy encoding can raise the decoded peak; the processor measures the
-result and reports that condition. The package report includes actual decoded
-loudness and peak values. Database `volume` remains a separate playback control.
+The package report records input loudness, input true peak, and applied gain.
+Database `volume` remains a separate playback control.
 
 Jackets are 8-bit RGB PNGs: 300×300 standard, 108×108 small, 676×676 large and
 128×128 selector. Images always use contain: the full image keeps its aspect

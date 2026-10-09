@@ -64,51 +64,59 @@ def ffmpeg() -> str:
     return executable
 
 
-def test_gain_preserves_dynamics_and_limits_true_peak() -> None:
-    settings = S3vMusicSettings(true_peak_dbtp=-1)
-    assert normalization_gain(LoudnessMeasurement(-20, -12), settings) == pytest.approx(9)
-    assert normalization_gain(LoudnessMeasurement(-20, -2), settings) == 1
-    assert normalization_gain(LoudnessMeasurement(-8, 1), settings) == pytest.approx(-3)
+def test_gain_depends_on_loudness_not_true_peak() -> None:
+    settings = S3vMusicSettings()
+    assert normalization_gain(LoudnessMeasurement(-20, -12), settings) == pytest.approx(10)
+    assert normalization_gain(LoudnessMeasurement(-20, -2), settings) == pytest.approx(10)
+    assert normalization_gain(LoudnessMeasurement(-8, 3), settings) == pytest.approx(-2)
     quiet = S3vMusicSettings(source_volume=0.5)
     assert normalization_gain(LoudnessMeasurement(-20, -12), quiet) == pytest.approx(
-        9 + 20 * math.log10(0.5)
+        10 + 20 * math.log10(0.5)
     )
 
 
-@pytest.mark.parametrize(
-    "input_lufs,encoded_peak,ceiling,codes",
-    [
-        (-11.2, -0.9, -1.0, set[str]()),
-        (-12.0, -0.5, -1.0, set[str]()),
-        (-12.1, -0.9, -1.0, {"AUDIO_PEAK_LIMITED"}),
-        (-11.2, -0.4, -1.0, {"AUDIO_CODEC_PEAK"}),
-        (-11.2, 0.0, -0.1, {"AUDIO_CODEC_PEAK"}),
-    ],
-)
-def test_audio_warnings_only_flag_material_deviations(
-    tmp_path: Path,
-    ffmpeg: str,
-    input_lufs: float,
-    encoded_peak: float,
-    ceiling: float,
-    codes: set[str],
+@pytest.mark.parametrize("mode", ["full", "preview", "song", "explicit"])
+def test_processing_only_measures_normalization_reference(
+    tmp_path: Path, ffmpeg: str, mode: str
 ) -> None:
     class Measurements(FfmpegMusicProcessor):
+        def __init__(self) -> None:
+            super().__init__(ffmpeg, encoder=_PcmCapture())
+            self.calls: list[tuple[Path, S3vMusicSettings]] = []
+
         def _analysis_output(self, source: Path, settings: S3vMusicSettings) -> str:
-            return json.dumps(
-                {
-                    "input_i": input_lufs,
-                    "input_tp": encoded_peak if source.suffix == ".s3v" else ceiling,
-                }
-            )
+            self.calls.append((source, settings))
+            return json.dumps({"input_i": -8.0, "input_tp": 3.0})
 
     source = _source(tmp_path / "source.wav")
-    result = Measurements(ffmpeg, encoder=_PcmCapture()).process(
-        MusicRequest(source, tmp_path / "output.s3v", S3vMusicSettings(true_peak_dbtp=ceiling))
+    processor = Measurements()
+    full = MusicRequest(source, tmp_path / "full.s3v", S3vMusicSettings())
+    preview = MusicRequest(
+        source,
+        tmp_path / "preview.s3v",
+        S3vMusicSettings(preview_start_ms=1000, preview_duration_ms=100),
     )
-    assert {d.code for d in result.diagnostics} == codes
-    assert result.gain_db == 0
-    assert result.output_measurement == LoudnessMeasurement(input_lufs, encoded_peak)
+    if mode == "song":
+        result, preview_result = processor.process_song(full, preview)
+        assert preview_result.gain_db == -2
+    elif mode == "preview":
+        result = processor.process_preview(preview)
+    elif mode == "explicit":
+        result = processor.process(
+            MusicRequest(
+                source,
+                tmp_path / "explicit.s3v",
+                S3vMusicSettings(gain_db=-2),
+            )
+        )
+    else:
+        result = processor.process(full)
+    assert result.gain_db == -2
+    assert not result.diagnostics
+    assert len(processor.calls) == (0 if mode == "explicit" else 1)
+    for path, settings in processor.calls:
+        assert path == source.resolved_path
+        assert settings.preview_start_ms is None
 
 
 @pytest.mark.parametrize(
@@ -153,8 +161,8 @@ def test_kson_offset_trims_positive_and_pads_negative(
     assert encoder.frames == expected_frames
     assert result.resource.uses == source.uses
     assert result.measurement is not None
-    assert result.output_measurement is not None
-    assert result.output_measurement.integrated_lufs == pytest.approx(-11, abs=0.1)
+    assert result.gain_db is not None
+    assert result.measurement.integrated_lufs + result.gain_db == pytest.approx(-10)
     if offset_ms < 0:
         assert encoder.start == bytes(len(encoder.start))
     else:
@@ -184,9 +192,7 @@ def test_preview_uses_raw_time_and_shared_gain(tmp_path: Path, ffmpeg: str) -> N
     assert any(encoder.start)
 
 
-def test_song_gain_accounts_for_loud_intro_omitted_by_chart_offset(
-    tmp_path: Path, ffmpeg: str
-) -> None:
+def test_song_gain_is_not_reduced_for_loud_preview(tmp_path: Path, ffmpeg: str) -> None:
     source = _source(tmp_path / "source.wav", loud_intro=True)
     processor = FfmpegMusicProcessor(ffmpeg, encoder=_PcmCapture())
     full, preview = processor.process_song(
@@ -202,13 +208,8 @@ def test_song_gain_accounts_for_loud_intro_omitted_by_chart_offset(
     )
     assert full.gain_db == preview.gain_db
     assert full.measurement is not None
-    assert full.output_measurement is not None
-    assert full.gain_db is not None
-    assert full.gain_db < normalization_gain(full.measurement, S3vMusicSettings())
-    assert full.output_measurement.true_peak_dbtp < -15
-    assert any(d.code == "AUDIO_PEAK_LIMITED" for d in full.diagnostics)
-    preview_levels = processor.analyze(preview.resource.path)
-    assert preview_levels.true_peak_dbtp == pytest.approx(-1, abs=0.05)
+    assert full.gain_db == normalization_gain(full.measurement, S3vMusicSettings())
+    assert not full.diagnostics
 
 
 def test_song_rejects_mismatched_normalization_before_writing(tmp_path: Path) -> None:
@@ -318,8 +319,8 @@ def test_native_s3v_codec_and_loudness(tmp_path: Path, ffmpeg: str) -> None:
     assert output.read_bytes()[:16] == bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c")
     data = output.read_bytes()
     assert struct.unpack("<4sII20s", data[-32:]) == (b"S3V0", 32, len(data) - 32, bytes(20))
-    assert result.output_measurement is not None
-    assert result.output_measurement.integrated_lufs == pytest.approx(-11, abs=0.2)
+    levels = FfmpegMusicProcessor(ffmpeg).analyze(result.resource.path)
+    assert levels.integrated_lufs == pytest.approx(-10, abs=0.2)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Non-Windows encoder failure")
