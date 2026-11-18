@@ -40,8 +40,6 @@
 
 ## Engineering
 
-- Use Python 3.14+, the `src/` layout, `pyproject.toml`, and `uv`. Keep production
-  code and tests fully typed under strict Pyright; use Ruff for lint and format.
 - Keep parsing and source validation, chart conversion, target validation, and
   serialization independently testable. Keep filesystem work in application and
   pipeline boundaries; imports must have no filesystem side effects.
