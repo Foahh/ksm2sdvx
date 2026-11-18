@@ -73,9 +73,9 @@ def test_linear_ramp_is_sampled_and_endpoint_jump_wins() -> None:
 def test_quadratic_curve_and_custom_sampling_interval() -> None:
     points = [[0, 1, [0.5, 0]], [60, 2]]
     assert samples(convert(points)) == [(15, 1.0625), (30, 1.25), (45, 1.5625), (60, 2)]
-    assert samples(convert(points, step=20)) == pytest.approx(
-        [(20, 1 + 1 / 9), (40, 1 + 4 / 9), (60, 2)]
-    )
+    actual = samples(convert(points, step=20))
+    assert [tick for tick, _ in actual] == [20, 40, 60]
+    assert [speed for _, speed in actual] == pytest.approx([1 + 1 / 9, 1 + 4 / 9, 2])
 
 
 def test_short_ramp_keeps_endpoint_and_last_control_has_no_span() -> None:

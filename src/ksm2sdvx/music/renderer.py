@@ -17,8 +17,8 @@ from ksm2sdvx.music.render_models import AudioRenderRequest, AudioRenderResult, 
 from ksm2sdvx.resources.models import ProcessedResource
 
 _PRESETS = frozenset({"clap", "clap_impact", "clap_punchy", "snare", "snare_lo"})
-_UPSTREAM_COMMIT = "41bfdaa7331808aff7239a9ec283cdba01b3b406"
-_AUDIO_COMMIT = "c51865f7757f47cffbd530469977aa94332d9826"
+_UPSTREAM_COMMIT = "63d6546808fe3afad4469f3e4d12ca85145650d8"
+_AUDIO_COMMIT = "5c2466d181aba37e3dc3c3eba6368f59b6843bcd"
 
 
 def _bundled_file(relative: str) -> Path:
